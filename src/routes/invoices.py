@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify, send_file
 from datetime import datetime, date
 import os
 from fpdf import FPDF, HTMLMixin
-from fpdf.enums import Align, XPos, YPos
+from fpdf2.enums import Align, XPos, YPos
 from src.models.database import db, Invoice, Booking, MonthlyCompanyInvoice, MonthlyInvoiceItem, Company, Client, Service, Settings
 from arabic_reshaper import ArabicReshaper
 from bidi.algorithm import get_display
