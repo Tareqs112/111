@@ -1,1 +1,1 @@
-web: /usr/bin/env python /opt/render/project/src/.venv/bin/gunicorn src.main:app
+web: PYTHONPATH=/opt/render/project/src/.venv/lib/python3.13/site-packages /opt/render/project/src/.venv/bin/python3.13 -m gunicorn src.main:app
