@@ -3,6 +3,10 @@ import sys
 # DON"T CHANGE THIS !!!
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
+# إضافة مسار site-packages للبيئة الافتراضية بشكل صريح
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 
+                                    '..', '.venv', 'lib', 'python3.13', 'site-packages'))
+
 from flask import Flask, send_from_directory
 from flask_cors import CORS
 from src.extensions import db
