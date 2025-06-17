@@ -1,1 +1,1 @@
-web: export PATH="/opt/render/project/src/.venv/bin:$PATH" && gunicorn src.main:app
+web: /opt/render/project/src/.venv/bin/python -m gunicorn src.main:app
