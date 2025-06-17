@@ -1,1 +1,1 @@
-web: gunicorn src.main:app
+web: python3.13 -m gunicorn src.main:app
