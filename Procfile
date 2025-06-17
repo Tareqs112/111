@@ -1,1 +1,1 @@
-web: python3.13 -m gunicorn src.main:app
+web: source .venv/bin/activate && gunicorn src.main:app
