@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from src.models.database import db, Settings
 import json
 import traceback
@@ -161,7 +161,7 @@ def update_admin_phones():
         if setting:
             setting.value = json.dumps(clean_phones)
         else:
-            setting = Settings(key="admin_phone_numbers", value=json.dumps(clean_phones))
+            setting = Settings(key=key, value=value_str)
             db.session.add(setting)
         
         db.session.commit()
@@ -221,7 +221,7 @@ def update_email_settings():
         if setting:
             setting.value = json.dumps(email_data)
         else:
-            setting = Settings(key="email_settings", value=json.dumps(email_data))
+            setting = Settings(key=key, value=value_str)
             db.session.add(setting)
         
         db.session.commit()
@@ -234,6 +234,7 @@ def update_email_settings():
 
 @settings_bp.route("/test-meta-whatsapp", methods=["POST"])
 def test_meta_whatsapp():
+    current_app.logger.debug("Received request to /settings/test-meta-whatsapp")
     """Test Meta WhatsApp Business API connection"""
     try:
         data = request.get_json()
@@ -347,6 +348,8 @@ def restore_settings():
         db.session.rollback()
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
+
 
 
 

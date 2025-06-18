@@ -1,6 +1,8 @@
 import os
 import sys
-# DON\'T CHANGE THIS !!!
+import logging
+
+# DON\"T CHANGE THIS !!!
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from flask import Flask, send_from_directory
@@ -18,6 +20,10 @@ from src.routes.dashboard import dashboard_bp
 
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), "static"))
 app.config["SECRET_KEY"] = "tourism_booking_secret_key_2024"
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
+app.logger.setLevel(logging.DEBUG)
 
 # Enable CORS for all routes
 CORS(app)
@@ -44,13 +50,11 @@ db.init_app(app)
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
 def serve(path):
+    app.logger.debug(f"Serving static file: {path}")
     if path != "" and os.path.exists(app.static_folder + "/" + path):
         return send_from_directory(app.static_folder, path)
     else:
         return send_from_directory(app.static_folder, "index.html")
-
-
-
 
 
 if __name__ == "__main__":
