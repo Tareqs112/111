@@ -195,7 +195,7 @@ def get_todays_bookings():
             # Get service details for services within this booking that start today
             services_today = []
             for service in booking.services:
-                if service.startDate and service.startDate.date() == today:
+                if service.startDate and service.startDate == today:
                     services_today.append({
                         "serviceName": service.serviceName,
                         "serviceType": service.serviceType
