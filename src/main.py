@@ -43,6 +43,7 @@ app.register_blueprint(dashboard_bp, url_prefix="/api")
 # استخدام متغير البيئة DATABASE_URL لقاعدة البيانات في بيئة الإنتاج (مثل PostgreSQL)
 # أو استخدام SQLite للتطوير المحلي إذا لم يكن المتغير موجودًا
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", "sqlite:///" + os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "app.db"))
+print(f"Database URI: {app.config['SQLALCHEMY_DATABASE_URI']}") # أضف هذا السطر
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db.init_app(app)
 

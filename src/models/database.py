@@ -65,6 +65,7 @@ class Booking(db.Model):
     
     # Relationships
     services = db.relationship("Service", backref="booking_ref", lazy=True, cascade="all, delete-orphan")
+    invoices = db.relationship("Invoice", backref="booking", lazy=True, cascade="all, delete-orphan")
 
     @property
     def client(self):
@@ -179,7 +180,7 @@ class Invoice(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relationship
-    booking = db.relationship("Booking", backref="invoices", lazy=True)
+    # booking = db.relationship("Booking", backref="invoices", lazy=True) # This line is removed as the relationship is defined in Booking model
 
 # New model for monthly company invoices
 class MonthlyCompanyInvoice(db.Model):
@@ -264,4 +265,6 @@ class Settings(db.Model):
     value = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 
