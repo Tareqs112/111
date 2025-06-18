@@ -64,7 +64,7 @@ def update_setting(key):
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-@settings_bp.route("/settings/meta-whatsapp", methods=["GET"])
+@settings_bp.route("/meta-whatsapp", methods=["GET"])
 def get_meta_whatsapp_settings():
     """Get Meta WhatsApp Business API settings"""
     try:
@@ -89,7 +89,7 @@ def get_meta_whatsapp_settings():
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-@settings_bp.route("/settings/meta-whatsapp", methods=["POST"])
+@settings_bp.route("/meta-whatsapp", methods=["POST"])
 def update_meta_whatsapp_settings():
     """Update Meta WhatsApp Business API settings"""
     try:
