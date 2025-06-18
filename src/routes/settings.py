@@ -5,7 +5,7 @@ import traceback
 
 settings_bp = Blueprint("settings", __name__)
 
-@settings_bp.route("/settings", methods=["GET"])
+@settings_bp.route("/", methods=["GET"])
 def get_settings():
     """Get all settings"""
     try:
@@ -21,7 +21,7 @@ def get_settings():
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-@settings_bp.route("/settings/<key>", methods=["GET"])
+@settings_bp.route("/<key>", methods=["GET"])
 def get_setting(key):
     """Get specific setting"""
     try:
@@ -37,14 +37,14 @@ def get_setting(key):
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-@settings_bp.route("/settings/<key>", methods=["POST"])
+@settings_bp.route("/<key>", methods=["POST"])
 def update_setting(key):
     """Update specific setting"""
     try:
         data = request.get_json()
         value = data.get("value")
         
-        # Convert value to JSON string if it's not already a string
+        # Convert value to JSON string if it\"s not already a string
         if isinstance(value, (dict, list)):
             value_str = json.dumps(value)
         else:
@@ -71,7 +71,7 @@ def get_meta_whatsapp_settings():
         setting = Settings.query.filter_by(key="meta_whatsapp_settings").first()
         if setting:
             settings_data = json.loads(setting.value)
-            # Don't return sensitive data like access_token and app_secret
+            # Don\"t return sensitive data like access_token and app_secret
             safe_settings = {
                 "phone_number_id": settings_data.get("phone_number_id", ""),
                 "app_id": settings_data.get("app_id", ""),
@@ -127,7 +127,7 @@ def update_meta_whatsapp_settings():
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-@settings_bp.route("/settings/admin-phones", methods=["GET"])
+@settings_bp.route("/admin-phones", methods=["GET"])
 def get_admin_phones():
     """Get admin phone numbers"""
     try:
@@ -140,7 +140,7 @@ def get_admin_phones():
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-@settings_bp.route("/settings/admin-phones", methods=["POST"])
+@settings_bp.route("/admin-phones", methods=["POST"])
 def update_admin_phones():
     """Update admin phone numbers"""
     try:
@@ -172,14 +172,14 @@ def update_admin_phones():
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-@settings_bp.route("/settings/email", methods=["GET"])
+@settings_bp.route("/email", methods=["GET"])
 def get_email_settings():
     """Get email settings"""
     try:
         setting = Settings.query.filter_by(key="email_settings").first()
         if setting:
             email_data = json.loads(setting.value)
-            # Don't return password for security
+            # Don\"t return password for security
             safe_email_data = {
                 "smtp_server": email_data.get("smtp_server", ""),
                 "smtp_port": email_data.get("smtp_port", "587"),
@@ -197,7 +197,7 @@ def get_email_settings():
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-@settings_bp.route("/settings/email", methods=["POST"])
+@settings_bp.route("/email", methods=["POST"])
 def update_email_settings():
     """Update email settings"""
     try:
@@ -225,14 +225,14 @@ def update_email_settings():
             db.session.add(setting)
         
         db.session.commit()
-        return jsonify({"message": "E-posta ayarları başarıyla güncellendi"})
+        return jsonify({"message": "E-posta ayarları başarıyla güncelllendi"})
         
     except Exception as e:
         db.session.rollback()
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-@settings_bp.route("/settings/test-meta-whatsapp", methods=["POST"])
+@settings_bp.route("/test-meta-whatsapp", methods=["POST"])
 def test_meta_whatsapp():
     """Test Meta WhatsApp Business API connection"""
     try:
@@ -245,7 +245,7 @@ def test_meta_whatsapp():
         # Import the notification function
         from src.routes.notifications import send_whatsapp_notification_meta
         
-        test_message = "🧪 Meta WhatsApp Business API Test Mesajı\n\nBu bir test mesajıdır. API bağlantısı başarılı!"
+        test_message = "🧪 Meta WhatsApp Business API Test Mesajı\\n\\nBu bir test mesajıdır. API bağlantısı başarılı!"
         
         success = send_whatsapp_notification_meta(test_phone, test_message)
         
@@ -258,12 +258,12 @@ def test_meta_whatsapp():
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-@settings_bp.route("/settings/test-turkish-template", methods=["POST"])
+@settings_bp.route("/test-turkish-template", methods=["POST"])
 def test_turkish_template():
     """Test Turkish notification template"""
     try:
         data = request.get_json()
-        recipient_type = data.get("recipient_type", "admin")  # "admin" or "driver"
+        recipient_type = data.get("recipient_type", "admin")  # \"admin\" or \"driver\"
         test_phone = data.get("test_phone")  # Required for driver test
         
         # Import the notification functions
@@ -299,7 +299,7 @@ def test_turkish_template():
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-@settings_bp.route("/settings/backup", methods=["GET"])
+@settings_bp.route("/backup", methods=["GET"])
 def backup_settings():
     """Backup all settings"""
     try:
@@ -319,7 +319,7 @@ def backup_settings():
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-@settings_bp.route("/settings/restore", methods=["POST"])
+@settings_bp.route("/restore", methods=["POST"])
 def restore_settings():
     """Restore settings from backup"""
     try:
@@ -327,7 +327,7 @@ def restore_settings():
         settings_data = data.get("settings", {})
         
         for key, value in settings_data.items():
-            # Convert value to JSON string if it's not already a string
+            # Convert value to JSON string if it\"s not already a string
             if isinstance(value, (dict, list)):
                 value_str = json.dumps(value)
             else:
@@ -347,4 +347,6 @@ def restore_settings():
         db.session.rollback()
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
+
 
