@@ -1,34 +1,74 @@
-from flask import Flask, jsonify, current_app
-from src.models.database import db
-from src.routes.settings import settings_bp
 import os
+import sys
+import logging
 
-def create_app():
-    app = Flask(__name__)
-    app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", "sqlite:///site.db")
-    app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-    
-    db.init_app(app)
+# DON"T CHANGE THIS !!!
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-    app.register_blueprint(settings_bp, url_prefix="/settings")
+from flask import Flask, send_from_directory, jsonify # أضفنا jsonify هنا
+from flask_cors import CORS
+from src.extensions import db
+from src.routes.clients import clients_bp
+from src.routes.companies import companies_bp
+from src.routes.drivers import drivers_bp
+from src.routes.vehicles import vehicles_bp
+from src.routes.bookings import bookings_bp
+from src.routes.invoices import invoices_bp
+from src.routes.notifications import notifications_bp
+from src.routes.settings import settings_bp
+from src.routes.dashboard import dashboard_bp
 
-    @app.route("/")
-    def home():
-        return "Welcome to the Flask App!"
+app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), "static"))
+app.config["SECRET_KEY"] = "tourism_booking_secret_key_2024"
 
-    @app.route("/_routes")
-    def list_routes():
-        output = []
-        for rule in app.url_map.iter_rules():
-            methods = ",".join(rule.methods)
-            output.append(f"{rule.endpoint}: {rule.rule} ({methods})")
-        return jsonify(output)
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
+app.logger.setLevel(logging.DEBUG)
 
-    return app
+# Enable CORS for all routes
+CORS(app)
 
-app = create_app()
+# Register blueprints
+app.register_blueprint(clients_bp, url_prefix="/api")
+app.register_blueprint(companies_bp, url_prefix="/api")
+app.register_blueprint(drivers_bp, url_prefix="/api")
+app.register_blueprint(vehicles_bp, url_prefix="/api")
+app.register_blueprint(bookings_bp, url_prefix="/api")
+app.register_blueprint(invoices_bp, url_prefix="/api")
+app.register_blueprint(notifications_bp, url_prefix="/api")
+app.register_blueprint(settings_bp, url_prefix="/settings")
+app.register_blueprint(dashboard_bp, url_prefix="/api")
+
+# Database configuration
+# استخدام متغير البيئة DATABASE_URL لقاعدة البيانات في بيئة الإنتاج (مثل PostgreSQL)
+# أو استخدام SQLite للتطوير المحلي إذا لم يكن المتغير موجودًا
+app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", "sqlite:///" + os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "app.db"))
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+db.init_app(app)
+
+# إضافة مسار /_routes لتصحيح الأخطاء
+@app.route("/_routes")
+def list_routes():
+    output = []
+    for rule in app.url_map.iter_rules():
+        methods = ",".join(rule.methods)
+        output.append(f"{rule.endpoint}: {rule.rule} ({methods})")
+    return jsonify(output)
+
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
+def serve(path):
+    app.logger.debug(f"Serving static file: {path}")
+    if path != "" and os.path.exists(app.static_folder + "/" + path):
+        return send_from_directory(app.static_folder, path)
+    else:
+        return send_from_directory(app.static_folder, "index.html")
+
 
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
-    app.run(host="0.0.0.0", port=os.environ.get("PORT", 5000))
+        print("Database tables created and/or checked.")
+    # استخدام متغير البيئة PORT الذي يوفره المضيف، أو استخدام 5000 كافتراضي للتطوير المحلي
+    port = int(os.environ.get("PORT", 5000))
+    app.run(debug=True, host="0.0.0.0", port=port)
