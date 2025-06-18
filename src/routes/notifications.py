@@ -768,3 +768,22 @@ def update_admin_settings():
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
+from flask import Blueprint, jsonify
+from src.routes.notifications import send_whatsapp_notification_meta # تأكد من أن هذا الاستيراد موجود بالفعل أو أضفه
+
+# ... (بقية الكود في notifications.py)
+
+@notifications_bp.route("/test-whatsapp-direct", methods=["GET"])
+def test_whatsapp_direct():
+    # استبدل هذا برقم هاتف WhatsApp الخاص بك الذي تريد إرسال رسالة اختبار إليه
+    test_phone_number = "+905540171890" # غيّر هذا الرقم
+    test_message = "هذه رسالة اختبار مباشرة من الباك إند Flask!"
+
+    try:
+        success = send_whatsapp_notification_meta(test_phone_number, test_message)
+        if success:
+            return jsonify({"status": "success", "message": "Test message sent successfully!"})
+        else:
+            return jsonify({"status": "failed", "message": "Failed to send test message."}), 500
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
