@@ -306,3 +306,5 @@ def get_company_clients(company_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
+

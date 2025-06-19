@@ -183,31 +183,23 @@ def get_todays_bookings():
         today = date.today()
         
         # Get bookings where overall_startDate is today
+        # Order by overall_startDate (already today) and then by client name for consistency
         todays_bookings_overall = Booking.query.filter(
             Booking.overall_startDate == today,
             Booking.status.in_(["pending", "confirmed", "completed"])
-        ).all()
+        ).order_by(Booking.overall_startDate.asc(), Client.firstName.asc(), Client.lastName.asc()).join(Client, Booking.client_id == Client.id).all()
         
         todays_data = []
         for booking in todays_bookings_overall:
             client_name = f"{booking.client_ref.firstName} {booking.client_ref.lastName}" if booking.client_ref else "Unknown Client"
             
-            # Get service details for services within this booking that start today
-            services_today = []
-            for service in booking.services:
-                if service.startDate and service.startDate == today:
-                    services_today.append({
-                        "serviceName": service.serviceName,
-                        "serviceType": service.serviceType
-                    })
-            
-            # Only add the booking to todays_data if it has services starting today
-            if services_today:
-                todays_data.append({
-                    "id": booking.id,
-                    "client": client_name,
-                    "services": services_today
-                })
+            # For today's bookings, we only need the client name and the overall_startDate
+            # The services are not needed for the simplified display
+            todays_data.append({
+                "id": booking.id,
+                "client": client_name,
+                "startDate": booking.overall_startDate.isoformat() if booking.overall_startDate else None
+            })
         
         return jsonify(todays_data)
     except Exception as e:
@@ -256,5 +248,7 @@ def get_accommodation_stats():
     except Exception as e:
         traceback.print_exc() # Print full traceback to console
         return jsonify({"error": str(e)}), 500
+
+
 
 
