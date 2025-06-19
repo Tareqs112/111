@@ -5,7 +5,7 @@ import logging
 # DON"T CHANGE THIS !!!
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from flask import Flask, send_from_directory, jsonify # أضفنا jsonify هنا
+from flask import Flask, send_from_directory, jsonify
 from flask_cors import CORS
 from src.extensions import db
 from src.routes.clients import clients_bp
@@ -42,8 +42,13 @@ app.register_blueprint(dashboard_bp, url_prefix="/api")
 # Database configuration
 # استخدام متغير البيئة DATABASE_URL لقاعدة البيانات في بيئة الإنتاج (مثل PostgreSQL)
 # أو استخدام SQLite للتطوير المحلي إذا لم يكن المتغير موجودًا
-app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", "sqlite:///" + os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "app.db"))
-print(f"Database URI: {app.config['SQLALCHEMY_DATABASE_URI']}") # أضف هذا السطر
+app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
+# إذا لم يكن DATABASE_URL موجودًا (مثلاً في بيئة التطوير المحلية بدون إعداد متغيرات بيئة Railway)
+# يمكن استخدام SQLite كخيار احتياطي، أو يمكنك إزالة السطر التالي إذا كنت تريد فرض استخدام PostgreSQL دائمًا.
+if app.config["SQLALCHEMY_DATABASE_URI"] is None:
+    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "app.db")
+
+print(f"Database URI: {app.config['SQLALCHEMY_DATABASE_URI']}")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db.init_app(app)
 
@@ -68,12 +73,13 @@ def serve(path):
 
 if __name__ == "__main__":
     with app.app_context():
-        print("Attempting to drop all database tables...") # هذا السطر يجب أن يكون موجودًا
-        db.drop_all() # هذا السطر يجب أن يكون موجودًا
+        print("Attempting to drop all database tables...")
+        db.drop_all()
         db.create_all()
         print("Database tables created and/or checked.")
-    # ... بقية الكود
 
     # استخدام متغير البيئة PORT الذي يوفره المضيف، أو استخدام 5000 كافتراضي للتطوير المحلي
     port = int(os.environ.get("PORT", 5000))
     app.run(debug=True, host="0.0.0.0", port=port)
+
+

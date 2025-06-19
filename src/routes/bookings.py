@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from src.models.database import db, Booking, Client, Driver, Vehicle, Service
+from src.models.database import db, Booking, Client, Driver, Vehicle, Service, Invoice, Notification, MonthlyInvoiceItem
 from datetime import datetime, time
 
 bookings_bp = Blueprint("bookings", __name__)
@@ -311,22 +311,68 @@ def delete_booking(booking_id):
     try:
         booking = Booking.query.get_or_404(booking_id)
 
-        # حذف الإشعارات المرتبطة
-        for notification in booking.notifications:
-            db.session.delete(notification)
+        # الطريقة الصحيحة: حذف الفواتير أولاً وبشكل صريح
+        # هذا يمنع SQLAlchemy من محاولة تحديث booking_id إلى NULL
+        print(f"🗑️ بدء حذف الحجز رقم {booking_id}")
+        
+        # الخطوة 1: حذف الفواتير أولاً (هذا هو الأهم!)
+        invoices = Invoice.query.filter_by(booking_id=booking.id).all()
+        print(f"📄 العثور على {len(invoices)} فاتورة مرتبطة")
+        for invoice in invoices:
+            print(f"   حذف الفاتورة رقم {invoice.id}")
+            db.session.delete(invoice)
+        
+        # فرض تنفيذ حذف الفواتير فوراً قبل المتابعة
+        if invoices:
+            db.session.flush()
+            print("✅ تم حذف جميع الفواتير")
 
-        # حذف الخدمات المرتبطة
+        # الخطوة 2: حذف عناصر الفواتير الشهرية المرتبطة بالخدمات
+        monthly_items_count = 0
         for service in booking.services:
+            monthly_invoice_items = MonthlyInvoiceItem.query.filter_by(service_id=service.id).all()
+            for item in monthly_invoice_items:
+                db.session.delete(item)
+                monthly_items_count += 1
+        
+        if monthly_items_count > 0:
+            db.session.flush()
+            print(f"✅ تم حذف {monthly_items_count} عنصر من الفواتير الشهرية")
+
+        # الخطوة 3: حذف الإشعارات المرتبطة بالحجز
+        notifications = Notification.query.filter_by(booking_id=booking.id).all()
+        print(f"🔔 العثور على {len(notifications)} إشعار مرتبط")
+        for notification in notifications:
+            db.session.delete(notification)
+        
+        if notifications:
+            db.session.flush()
+            print("✅ تم حذف جميع الإشعارات")
+
+        # الخطوة 4: حذف الخدمات المرتبطة بالحجز
+        services = Service.query.filter_by(booking_id=booking.id).all()
+        print(f"🛎️ العثور على {len(services)} خدمة مرتبطة")
+        for service in services:
             db.session.delete(service)
+        
+        if services:
+            db.session.flush()
+            print("✅ تم حذف جميع الخدمات")
 
-        # حذف الحجز
+        # الخطوة 5: حذف الحجز نفسه (الآن يجب أن يكون آمناً)
+        print(f"📋 حذف الحجز رقم {booking.id}")
         db.session.delete(booking)
+        
+        # تنفيذ جميع التغييرات
         db.session.commit()
+        print("✅ تم حذف الحجز وجميع البيانات المرتبطة به بنجاح")
 
-        return jsonify({"message": "Booking deleted successfully"})
+        return jsonify({"message": "تم حذف الحجز وجميع البيانات المرتبطة به بنجاح"})
+    
     except Exception as e:
+        print(f"❌ خطأ في حذف الحجز: {str(e)}")
         db.session.rollback()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"خطأ في حذف الحجز: {str(e)}"}), 500
 
 @bookings_bp.route("/bookings/service-types", methods=["GET"])
 def get_service_types():
