@@ -424,7 +424,7 @@ def generate_client_detailed_invoice_pdf(client_data):
     # Hotels Summary
     if hotels:
         pdf.set_font("NotoArabic", "B", 12) if add_unicode_fonts(pdf) else pdf.set_font("Helvetica", "B", 12)
-        pdf.cell(0, 10, "Hotels", 0, 1, "L")
+        pdf.cell(0, 10, "Hotels/Bungaloves", 0, 1, "L")
         pdf.set_font("NotoArabic", "", 10) if add_unicode_fonts(pdf) else pdf.set_font("Helvetica", "", 10)
         
         # Smart table with auto-adjusting columns for hotels
@@ -454,7 +454,7 @@ def generate_client_detailed_invoice_pdf(client_data):
             city_col_width = int(city_col_width * ratio)
             price_col_width = 160 - hotel_col_width - city_col_width
         
-        pdf.cell(hotel_col_width, 8, "Hotel", 1, 0, "C")
+        pdf.cell(hotel_col_width, 8, "Name", 1, 0, "C")
         pdf.cell(city_col_width, 8, "City", 1, 0, "C")
         pdf.cell(price_col_width, 8, "Total Price", 1, 1, "C")
         
