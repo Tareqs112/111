@@ -212,6 +212,12 @@ def update_booking(booking_id):
         booking.status = data.get("status", "pending")
 
         # Handle services: delete existing, add new ones
+        # First, delete associated MonthlyInvoiceItem records for each service
+        existing_services = Service.query.filter_by(booking_id=booking.id).all()
+        for service in existing_services:
+            MonthlyInvoiceItem.query.filter_by(service_id=service.id).delete()
+        db.session.flush() # Flush to ensure MonthlyInvoiceItem deletions are processed
+
         Service.query.filter_by(booking_id=booking.id).delete()
         db.session.flush()
 
