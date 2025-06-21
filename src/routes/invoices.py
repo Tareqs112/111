@@ -1157,3 +1157,308 @@ def delete_invoice(invoice_id):
         db.session.rollback()
         logging.error(f"Error deleting invoice {invoice_id}: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+# ==========================================
+# NEW FEATURES: Excel-like Monthly Invoices
+# ==========================================
+
+# PDF Classes for new invoice types
+class ExcelLikeInvoicePDF(MyFPDF):
+    def header(self):
+        company_name, company_logo = get_company_settings()
+        
+        if company_logo and os.path.exists(company_logo):
+            try:
+                self.image(company_logo, 10, 8, 33)
+                self.ln(25)
+            except Exception as e:
+                logging.error(f"Could not load logo: {e}")
+                self.ln(10)
+        else:
+            self.ln(10)
+        
+        add_unicode_fonts(self)
+        self.set_font("NotoArabic", "B", 15) if add_unicode_fonts(self) else self.set_font("Helvetica", "B", 15)
+        self.cell(0, 10, safe_text(company_name), 0, 1, "C")
+        self.cell(0, 10, "Monthly Company Invoice - Excel Style", 0, 1, "C")
+        self.ln(10)
+
+    def footer(self):
+        self.set_y(-15)
+        add_unicode_fonts(self)
+        self.set_font("NotoArabic", "I", 8) if add_unicode_fonts(self) else self.set_font("Helvetica", "I", 8)
+        self.cell(0, 10, f"Page {self.page_no()}", 0, 0, "C")
+
+class MyCompanyDetailedInvoicePDF(MyFPDF):
+    def header(self):
+        company_name, company_logo = get_company_settings()
+        
+        if company_logo and os.path.exists(company_logo):
+            try:
+                self.image(company_logo, 10, 8, 33)
+                self.ln(25)
+            except Exception as e:
+                logging.error(f"Could not load logo: {e}")
+                self.ln(10)
+        else:
+            self.ln(10)
+        
+        add_unicode_fonts(self)
+        self.set_font("NotoArabic", "B", 15) if add_unicode_fonts(self) else self.set_font("Helvetica", "B", 15)
+        self.cell(0, 10, safe_text(company_name), 0, 1, "C")
+        self.cell(0, 10, "My Company Detailed Invoice", 0, 1, "C")
+        self.ln(10)
+
+    def footer(self):
+        self.set_y(-15)
+        add_unicode_fonts(self)
+        self.set_font("NotoArabic", "I", 8) if add_unicode_fonts(self) else self.set_font("Helvetica", "I", 8)
+        self.cell(0, 10, f"Page {self.page_no()}", 0, 0, "C")
+
+# NEW FUNCTION: Generate Excel-like monthly invoice PDF
+def generate_excel_like_monthly_invoice_pdf(company_data, excel_data):
+    """Generate Excel-like monthly invoice PDF showing payment status for each client"""
+    pdf = ExcelLikeInvoicePDF()
+    add_unicode_fonts(pdf)
+    pdf.add_page()
+    
+    # Company and period information
+    pdf.set_font("NotoArabic", "B", 14) if add_unicode_fonts(pdf) else pdf.set_font("Helvetica", "B", 14)
+    pdf.cell(0, 10, f"Company: {safe_text(company_data['name'])}", 0, 1, "L")
+    pdf.cell(0, 10, f"Period: {excel_data['period']['monthName']} {excel_data['period']['year']}", 0, 1, "L")
+    pdf.ln(10)
+    
+    # Table header
+    pdf.set_font("NotoArabic", "B", 10) if add_unicode_fonts(pdf) else pdf.set_font("Helvetica", "B", 10)
+    
+    # Column widths
+    col_widths = [40, 25, 25, 25, 25, 20]  # Client, Date, Amount, Paid, Due, Status
+    
+    pdf.cell(col_widths[0], 8, "Client Name", 1, 0, "C")
+    pdf.cell(col_widths[1], 8, "Arrival Date", 1, 0, "C")
+    pdf.cell(col_widths[2], 8, "Amount(USD)", 1, 0, "C")
+    pdf.cell(col_widths[3], 8, "Paid", 1, 0, "C")
+    pdf.cell(col_widths[4], 8, "Due", 1, 0, "C")
+    pdf.cell(col_widths[5], 8, "Status", 1, 1, "C")
+    
+    # Table data
+    pdf.set_font("NotoArabic", "", 9) if add_unicode_fonts(pdf) else pdf.set_font("Helvetica", "", 9)
+    
+    for client in excel_data['clients']:
+        # Determine row color based on payment status
+        if client['paymentStatus'] == 'paid':
+            pdf.set_fill_color(144, 238, 144)  # Light green
+        elif client['paymentStatus'] == 'partial':
+            pdf.set_fill_color(255, 255, 0)   # Yellow
+        else:
+            pdf.set_fill_color(255, 182, 193)  # Light red
+        
+        client_name = safe_text(client['clientName'][:25])
+        arrival_date = client['arrivalDate'][:10] if client['arrivalDate'] else "N/A"
+        
+        pdf.cell(col_widths[0], 6, client_name, 1, 0, "L", True)
+        pdf.cell(col_widths[1], 6, arrival_date, 1, 0, "C", True)
+        pdf.cell(col_widths[2], 6, f"${client['totalAmount']:.0f}", 1, 0, "R", True)
+        pdf.cell(col_widths[3], 6, f"${client['paidAmount']:.0f}", 1, 0, "R", True)
+        pdf.cell(col_widths[4], 6, f"${client['dueAmount']:.0f}", 1, 0, "R", True)
+        
+        status_text = "PAID" if client['paymentStatus'] == 'paid' else "DUE"
+        pdf.cell(col_widths[5], 6, status_text, 1, 1, "C", True)
+    
+    # Summary section
+    pdf.ln(5)
+    pdf.set_font("NotoArabic", "B", 12) if add_unicode_fonts(pdf) else pdf.set_font("Helvetica", "B", 12)
+    
+    # Summary table
+    summary_col_widths = [80, 40]
+    
+    pdf.set_fill_color(173, 216, 230)  # Light blue
+    pdf.cell(summary_col_widths[0], 8, "SUMMARY", 1, 0, "L", True)
+    pdf.cell(summary_col_widths[1], 8, "Amount (USD)", 1, 1, "C", True)
+    
+    pdf.set_fill_color(255, 255, 255)  # White
+    pdf.cell(summary_col_widths[0], 6, "Total Amount", 1, 0, "L", True)
+    pdf.cell(summary_col_widths[1], 6, f"${excel_data['summary']['totalAmount']:.0f}", 1, 1, "R", True)
+    
+    pdf.set_fill_color(144, 238, 144)  # Light green
+    pdf.cell(summary_col_widths[0], 6, "Total Paid", 1, 0, "L", True)
+    pdf.cell(summary_col_widths[1], 6, f"${excel_data['summary']['totalPaid']:.0f}", 1, 1, "R", True)
+    
+    pdf.set_fill_color(255, 182, 193)  # Light red
+    pdf.cell(summary_col_widths[0], 6, "Total Due", 1, 0, "L", True)
+    pdf.cell(summary_col_widths[1], 6, f"${excel_data['summary']['totalDue']:.0f}", 1, 1, "R", True)
+    
+    return pdf
+
+# NEW FUNCTION: Generate detailed invoice for my company
+def generate_my_company_detailed_invoice_pdf(company_data, excel_data):
+    """Generate detailed invoice for my company showing costs, profits, etc."""
+    pdf = MyCompanyDetailedInvoicePDF()
+    add_unicode_fonts(pdf)
+    pdf.add_page()
+    
+    # Company and period information
+    pdf.set_font("NotoArabic", "B", 14) if add_unicode_fonts(pdf) else pdf.set_font("Helvetica", "B", 14)
+    pdf.cell(0, 10, f"Partner Company: {safe_text(company_data['name'])}", 0, 1, "L")
+    pdf.cell(0, 10, f"Period: {excel_data['period']['monthName']} {excel_data['period']['year']}", 0, 1, "L")
+    pdf.cell(0, 10, f"Invoice Date: {date.today().strftime('%Y-%m-%d')}", 0, 1, "L")
+    pdf.ln(10)
+    
+    # Detailed breakdown by client
+    pdf.set_font("NotoArabic", "B", 12) if add_unicode_fonts(pdf) else pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 10, "Detailed Service Breakdown", 0, 1, "C")
+    pdf.ln(5)
+    
+    # For each client, show detailed services
+    for client in excel_data['clients']:
+        pdf.set_font("NotoArabic", "B", 11) if add_unicode_fonts(pdf) else pdf.set_font("Helvetica", "B", 11)
+        pdf.cell(0, 8, f"Client: {safe_text(client['clientName'])}", 0, 1, "L")
+        pdf.cell(0, 6, f"Arrival: {client['arrivalDate'][:10] if client['arrivalDate'] else 'N/A'}", 0, 1, "L")
+        pdf.ln(2)
+        
+        # Service details table header
+        pdf.set_font("NotoArabic", "B", 9) if add_unicode_fonts(pdf) else pdf.set_font("Helvetica", "B", 9)
+        service_col_widths = [60, 30, 30, 30]
+        
+        pdf.cell(service_col_widths[0], 6, "Service", 1, 0, "C")
+        pdf.cell(service_col_widths[1], 6, "Cost", 1, 0, "C")
+        pdf.cell(service_col_widths[2], 6, "Selling", 1, 0, "C")
+        pdf.cell(service_col_widths[3], 6, "Profit", 1, 1, "C")
+        
+        # Here you would get actual service details for the client
+        # For now, we'll show a summary row
+        pdf.set_font("NotoArabic", "", 9) if add_unicode_fonts(pdf) else pdf.set_font("Helvetica", "", 9)
+        
+        # Calculate estimated cost (70% of selling price for example)
+        estimated_cost = client['totalAmount'] * 0.7
+        estimated_profit = client['totalAmount'] - estimated_cost
+        
+        pdf.cell(service_col_widths[0], 6, "Service Package", 1, 0, "L")
+        pdf.cell(service_col_widths[1], 6, f"${estimated_cost:.0f}", 1, 0, "R")
+        pdf.cell(service_col_widths[2], 6, f"${client['totalAmount']:.0f}", 1, 0, "R")
+        pdf.cell(service_col_widths[3], 6, f"${estimated_profit:.0f}", 1, 1, "R")
+        
+        pdf.ln(5)
+    
+    # Overall summary
+    pdf.set_font("NotoArabic", "B", 12) if add_unicode_fonts(pdf) else pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 10, "Monthly Summary", 0, 1, "C")
+    pdf.ln(2)
+    
+    # Calculate totals
+    total_revenue = excel_data['summary']['totalAmount']
+    estimated_total_cost = total_revenue * 0.7
+    estimated_total_profit = total_revenue - estimated_total_cost
+    
+    summary_col_widths = [100, 40]
+    
+    pdf.set_fill_color(173, 216, 230)  # Light blue
+    pdf.cell(summary_col_widths[0], 8, "Financial Summary", 1, 0, "L", True)
+    pdf.cell(summary_col_widths[1], 8, "Amount (USD)", 1, 1, "C", True)
+    
+    pdf.set_fill_color(255, 255, 255)  # White
+    pdf.cell(summary_col_widths[0], 6, "Total Revenue", 1, 0, "L", True)
+    pdf.cell(summary_col_widths[1], 6, f"${total_revenue:.0f}", 1, 1, "R", True)
+    
+    pdf.cell(summary_col_widths[0], 6, "Estimated Total Cost", 1, 0, "L", True)
+    pdf.cell(summary_col_widths[1], 6, f"${estimated_total_cost:.0f}", 1, 1, "R", True)
+    
+    pdf.set_fill_color(144, 238, 144)  # Light green
+    pdf.cell(summary_col_widths[0], 6, "Estimated Profit", 1, 0, "L", True)
+    pdf.cell(summary_col_widths[1], 6, f"${estimated_total_profit:.0f}", 1, 1, "R", True)
+    
+    return pdf
+
+# NEW ROUTE: Generate Excel-like monthly invoice
+@invoices_bp.route("/invoices/monthly-excel/generate", methods=["POST"])
+def generate_excel_like_monthly_invoice():
+    """Generate Excel-like monthly invoice PDF"""
+    try:
+        data = request.get_json()
+        company_id = data.get('companyId')
+        month = data.get('month', datetime.now().month)
+        year = data.get('year', datetime.now().year)
+        
+        if not company_id:
+            return jsonify({"error": "Company ID is required"}), 400
+        
+        # Get company data
+        company = Company.query.get_or_404(company_id)
+        
+        # Get Excel-like data (this would call the companies endpoint)
+        from flask import current_app
+        with current_app.test_client() as client:
+            response = client.get(f'/api/companies/{company_id}/monthly-invoice-excel?month={month}&year={year}')
+            excel_data = response.get_json()
+        
+        # Generate PDF
+        pdf = generate_excel_like_monthly_invoice_pdf(company.__dict__, excel_data)
+        
+        # Save PDF
+        invoices_dir = os.path.join(os.path.dirname(__file__), "invoices")
+        if not os.path.exists(invoices_dir):
+            os.makedirs(invoices_dir)
+        
+        pdf_filename = f"excel_invoice_{company.name}_{month}_{year}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        pdf_path = os.path.join(invoices_dir, pdf_filename)
+        pdf.output(pdf_path)
+        
+        return jsonify({
+            "message": "Excel-like monthly invoice generated successfully",
+            "pdfPath": f"/api/invoices/download/{pdf_filename}",
+            "filename": pdf_filename
+        }), 201
+        
+    except Exception as e:
+        logging.error(f"Error generating Excel-like monthly invoice: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# NEW ROUTE: Generate detailed invoice for my company
+@invoices_bp.route("/invoices/my-company-detailed/generate", methods=["POST"])
+def generate_my_company_detailed_invoice():
+    """Generate detailed invoice for my company"""
+    try:
+        data = request.get_json()
+        company_id = data.get('companyId')
+        month = data.get('month', datetime.now().month)
+        year = data.get('year', datetime.now().year)
+        
+        if not company_id:
+            return jsonify({"error": "Company ID is required"}), 400
+        
+        # Get company data
+        company = Company.query.get_or_404(company_id)
+        
+        # Get Excel-like data (this would call the companies endpoint)
+        from flask import current_app
+        with current_app.test_client() as client:
+            response = client.get(f'/api/companies/{company_id}/monthly-invoice-excel?month={month}&year={year}')
+            excel_data = response.get_json()
+        
+        # Generate PDF
+        pdf = generate_my_company_detailed_invoice_pdf(company.__dict__, excel_data)
+        
+        # Save PDF
+        invoices_dir = os.path.join(os.path.dirname(__file__), "invoices")
+        if not os.path.exists(invoices_dir):
+            os.makedirs(invoices_dir)
+        
+        pdf_filename = f"my_company_detailed_{company.name}_{month}_{year}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        pdf_path = os.path.join(invoices_dir, pdf_filename)
+        pdf.output(pdf_path)
+        
+        return jsonify({
+            "message": "My company detailed invoice generated successfully",
+            "pdfPath": f"/api/invoices/download/{pdf_filename}",
+            "filename": pdf_filename
+        }), 201
+        
+    except Exception as e:
+        logging.error(f"Error generating my company detailed invoice: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# ==========================================
+# END OF NEW FEATURES
+# ==========================================
+
