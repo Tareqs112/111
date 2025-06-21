@@ -3,27 +3,44 @@ from src.models.database import db, Vehicle, Booking, Driver, Service # Import S
 
 vehicles_bp = Blueprint("vehicles", __name__)
 
+def safe_count(query_result):
+    """دالة مساعدة لضمان إرجاع رقم صحيح بدلاً من None"""
+    try:
+        result = query_result
+        return result if result is not None else 0
+    except Exception:
+        return 0
+
+def safe_int(value, default=0):
+    """دالة مساعدة لتحويل القيمة إلى رقم صحيح بأمان"""
+    try:
+        if value is None or value == '':
+            return default
+        return int(value)
+    except (ValueError, TypeError):
+        return default
+
 @vehicles_bp.route("/vehicles", methods=["GET"])
 def get_vehicles():
     try:
         vehicles = Vehicle.query.all()
         result = []
         for vehicle in vehicles:
-            # Check current availability by querying through Service model
-            active_services = Service.query.filter_by(vehicle_id=vehicle.id).join(Booking).filter(
+            # Check current availability by querying through Service model with safe counting
+            active_services = safe_count(Service.query.filter_by(vehicle_id=vehicle.id).join(Booking).filter(
                 Booking.status.in_(["pending", "confirmed"])
-            ).count()
+            ).count())
             
             availability = "Available" if active_services == 0 else "Booked"
             
-            # Calculate booking statistics for the vehicle
-            total_bookings = Service.query.filter_by(vehicle_id=vehicle.id).join(Booking).count()
-            active_bookings = Service.query.filter_by(vehicle_id=vehicle.id).join(Booking).filter(
+            # Calculate booking statistics for the vehicle with safe counting
+            total_bookings = safe_count(Service.query.filter_by(vehicle_id=vehicle.id).join(Booking).count())
+            active_bookings = safe_count(Service.query.filter_by(vehicle_id=vehicle.id).join(Booking).filter(
                 Booking.status.in_(["pending", "confirmed"])
-            ).count()
-            completed_bookings = Service.query.filter_by(vehicle_id=vehicle.id).join(Booking).filter(
+            ).count())
+            completed_bookings = safe_count(Service.query.filter_by(vehicle_id=vehicle.id).join(Booking).filter(
                 Booking.status == "completed"
-            ).count()
+            ).count())
             
             # Get assigned driver (permanent assignment)
             assigned_driver = None
@@ -32,21 +49,15 @@ def get_vehicles():
                 assigned_driver = f"{vehicle.assigned_driver.firstName} {vehicle.assigned_driver.lastName}"
                 assigned_driver_id = vehicle.assigned_driver.id
             
-            # Calculate booking statistics for the vehicle
-            total_bookings = Service.query.filter_by(vehicle_id=vehicle.id).join(Booking).count()
-            active_bookings = Service.query.filter_by(vehicle_id=vehicle.id).join(Booking).filter(
-                Booking.status.in_(["pending", "confirmed"])
-            ).count()
-            completed_bookings = Service.query.filter_by(vehicle_id=vehicle.id).join(Booking).filter(
-                Booking.status == "completed"
-            ).count()
+            # Ensure capacity is a safe integer
+            safe_capacity = safe_int(vehicle.capacity, 0)
             
             result.append({
                 "id": vehicle.id,
                 "model": vehicle.model,
                 "plateNumber": vehicle.plateNumber,
                 "type": vehicle.type,
-                "capacity": vehicle.capacity,
+                "capacity": safe_capacity,
                 "assignedDriver": assigned_driver,
                 "assignedDriverId": assigned_driver_id,
                 "availability": availability,
@@ -63,10 +74,10 @@ def get_vehicle(vehicle_id):
     try:
         vehicle = Vehicle.query.get_or_404(vehicle_id)
         
-        # Check current availability by querying through Service model
-        active_services = Service.query.filter_by(vehicle_id=vehicle.id).join(Booking).filter(
+        # Check current availability by querying through Service model with safe counting
+        active_services = safe_count(Service.query.filter_by(vehicle_id=vehicle.id).join(Booking).filter(
             Booking.status.in_(["pending", "confirmed"])
-        ).count()
+        ).count())
         
         availability = "Available" if active_services == 0 else "Booked"
         
@@ -77,15 +88,30 @@ def get_vehicle(vehicle_id):
             assigned_driver = f"{vehicle.assigned_driver.firstName} {vehicle.assigned_driver.lastName}"
             assigned_driver_id = vehicle.assigned_driver.id
         
+        # Calculate booking statistics with safe counting
+        total_bookings = safe_count(Service.query.filter_by(vehicle_id=vehicle.id).join(Booking).count())
+        active_bookings = safe_count(Service.query.filter_by(vehicle_id=vehicle.id).join(Booking).filter(
+            Booking.status.in_(["pending", "confirmed"])
+        ).count())
+        completed_bookings = safe_count(Service.query.filter_by(vehicle_id=vehicle.id).join(Booking).filter(
+            Booking.status == "completed"
+        ).count())
+        
+        # Ensure capacity is a safe integer
+        safe_capacity = safe_int(vehicle.capacity, 0)
+        
         return jsonify({
             "id": vehicle.id,
             "model": vehicle.model,
             "plateNumber": vehicle.plateNumber,
             "type": vehicle.type,
-            "capacity": vehicle.capacity,
+            "capacity": safe_capacity,
             "assignedDriver": assigned_driver,
             "assignedDriverId": assigned_driver_id,
-            "availability": availability
+            "availability": availability,
+            "totalBookings": total_bookings,
+            "activeBookings": active_bookings,
+            "completedBookings": completed_bookings
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -104,11 +130,16 @@ def add_vehicle():
         if existing_vehicle:
             return jsonify({"error": "Plate number already exists"}), 400
         
+        # Safely convert capacity to integer
+        safe_capacity = safe_int(data["capacity"], 1)
+        if safe_capacity <= 0:
+            return jsonify({"error": "Capacity must be a positive number"}), 400
+        
         vehicle = Vehicle(
             model=data["model"],
             plateNumber=data["plateNumber"],
             type=data["type"],
-            capacity=int(data["capacity"]),
+            capacity=safe_capacity,
             assigned_driver_id=data.get("assignedDriverId") if data.get("assignedDriverId") else None
         )
         
@@ -127,10 +158,13 @@ def add_vehicle():
             "model": vehicle.model,
             "plateNumber": vehicle.plateNumber,
             "type": vehicle.type,
-            "capacity": vehicle.capacity,
+            "capacity": safe_capacity,
             "assignedDriver": assigned_driver,
             "assignedDriverId": assigned_driver_id,
-            "availability": "Available"
+            "availability": "Available",
+            "totalBookings": 0,
+            "activeBookings": 0,
+            "completedBookings": 0
         }), 201
     except Exception as e:
         db.session.rollback()
@@ -151,10 +185,15 @@ def update_vehicle(vehicle_id):
         if existing_vehicle:
             return jsonify({"error": "Plate number already exists"}), 400
         
+        # Safely convert capacity to integer
+        safe_capacity = safe_int(data["capacity"], 1)
+        if safe_capacity <= 0:
+            return jsonify({"error": "Capacity must be a positive number"}), 400
+        
         vehicle.model = data["model"]
         vehicle.plateNumber = data["plateNumber"]
         vehicle.type = data["type"]
-        vehicle.capacity = int(data["capacity"])
+        vehicle.capacity = safe_capacity
         
         # Handle assigned_driver_id update
         if "assignedDriverId" in data:
@@ -162,10 +201,10 @@ def update_vehicle(vehicle_id):
 
         db.session.commit()
         
-        # Get current status by querying through Service model
-        active_services = Service.query.filter_by(vehicle_id=vehicle.id).join(Booking).filter(
+        # Get current status by querying through Service model with safe counting
+        active_services = safe_count(Service.query.filter_by(vehicle_id=vehicle.id).join(Booking).filter(
             Booking.status.in_(["pending", "confirmed"])
-        ).count()
+        ).count())
         
         availability = "Available" if active_services == 0 else "Booked"
         
@@ -176,15 +215,27 @@ def update_vehicle(vehicle_id):
             assigned_driver = f"{vehicle.assigned_driver.firstName} {vehicle.assigned_driver.lastName}"
             assigned_driver_id = vehicle.assigned_driver.id
         
+        # Calculate booking statistics with safe counting
+        total_bookings = safe_count(Service.query.filter_by(vehicle_id=vehicle.id).join(Booking).count())
+        active_bookings = safe_count(Service.query.filter_by(vehicle_id=vehicle.id).join(Booking).filter(
+            Booking.status.in_(["pending", "confirmed"])
+        ).count())
+        completed_bookings = safe_count(Service.query.filter_by(vehicle_id=vehicle.id).join(Booking).filter(
+            Booking.status == "completed"
+        ).count())
+        
         return jsonify({
             "id": vehicle.id,
             "model": vehicle.model,
             "plateNumber": vehicle.plateNumber,
             "type": vehicle.type,
-            "capacity": vehicle.capacity,
+            "capacity": safe_capacity,
             "assignedDriver": assigned_driver,
             "assignedDriverId": assigned_driver_id,
-            "availability": availability
+            "availability": availability,
+            "totalBookings": total_bookings,
+            "activeBookings": active_bookings,
+            "completedBookings": completed_bookings
         })
     except Exception as e:
         db.session.rollback()
@@ -195,10 +246,10 @@ def delete_vehicle(vehicle_id):
     try:
         vehicle = Vehicle.query.get_or_404(vehicle_id)
         
-        # Check if vehicle has active bookings by querying through Service model
-        active_services = Service.query.filter_by(vehicle_id=vehicle_id).join(Booking).filter(
+        # Check if vehicle has active bookings by querying through Service model with safe counting
+        active_services = safe_count(Service.query.filter_by(vehicle_id=vehicle_id).join(Booking).filter(
             Booking.status.in_(["pending", "confirmed"])
-        ).count()
+        ).count())
         
         if active_services > 0:
             return jsonify({"error": f"Cannot delete vehicle with {active_services} active bookings"}), 400
@@ -283,8 +334,6 @@ def get_available_drivers():
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-
 
 # New endpoint to get vehicle schedule/calendar data
 @vehicles_bp.route("/vehicles/<int:vehicle_id>/schedule", methods=["GET"])
@@ -379,14 +428,17 @@ def get_vehicles_status():
             elif next_booking:
                 status = "scheduled"
             
+            # Ensure capacity is a safe integer
+            safe_capacity = safe_int(vehicle.capacity, 0)
+            
             result.append({
                 "id": vehicle.id,
                 "model": vehicle.model,
                 "plateNumber": vehicle.plateNumber,
                 "type": vehicle.type,
-                "capacity": vehicle.capacity,
-                "assignedDriver": f"{vehicle.assigned_driver.firstName} {vehicle.assigned_driver.lastName}" if vehicle.assigned_driver else None,
+                "capacity": safe_capacity,
                 "status": status,
+                "assignedDriver": f"{vehicle.assigned_driver.firstName} {vehicle.assigned_driver.lastName}" if vehicle.assigned_driver else None,
                 "currentBooking": {
                     "id": active_today.id,
                     "serviceName": active_today.serviceName,

@@ -3,6 +3,14 @@ from src.models.database import db, Driver, Vehicle, Booking, Service # Import S
 
 drivers_bp = Blueprint("drivers", __name__)
 
+def safe_count(query_result):
+    """دالة مساعدة لضمان إرجاع رقم صحيح بدلاً من None"""
+    try:
+        result = query_result
+        return result if result is not None else 0
+    except Exception:
+        return 0
+
 @drivers_bp.route("/drivers", methods=["GET"])
 def get_drivers():
     try:
@@ -19,14 +27,14 @@ def get_drivers():
                     "type": vehicle.type
                 })
             
-            # Calculate booking statistics for the driver
-            total_bookings = Service.query.filter_by(driver_id=driver.id).join(Booking).count()
-            active_bookings = Service.query.filter_by(driver_id=driver.id).join(Booking).filter(
+            # Calculate booking statistics for the driver with safe counting
+            total_bookings = safe_count(Service.query.filter_by(driver_id=driver.id).join(Booking).count())
+            active_bookings = safe_count(Service.query.filter_by(driver_id=driver.id).join(Booking).filter(
                 Booking.status.in_(["pending", "confirmed"])
-            ).count()
-            completed_bookings = Service.query.filter_by(driver_id=driver.id).join(Booking).filter(
+            ).count())
+            completed_bookings = safe_count(Service.query.filter_by(driver_id=driver.id).join(Booking).filter(
                 Booking.status == "completed"
-            ).count()
+            ).count())
             
             result.append({
                 "id": driver.id,
@@ -59,6 +67,15 @@ def get_driver(driver_id):
                 "type": vehicle.type
             })
         
+        # Calculate booking statistics with safe counting
+        total_bookings = safe_count(Service.query.filter_by(driver_id=driver.id).join(Booking).count())
+        active_bookings = safe_count(Service.query.filter_by(driver_id=driver.id).join(Booking).filter(
+            Booking.status.in_(["pending", "confirmed"])
+        ).count())
+        completed_bookings = safe_count(Service.query.filter_by(driver_id=driver.id).join(Booking).filter(
+            Booking.status == "completed"
+        ).count())
+        
         return jsonify({
             "id": driver.id,
             "firstName": driver.firstName,
@@ -66,7 +83,10 @@ def get_driver(driver_id):
             "email": driver.email,
             "phone": driver.phone,
             "licenseNumber": driver.licenseNumber,
-            "assignedVehicles": assigned_vehicles
+            "assignedVehicles": assigned_vehicles,
+            "totalBookings": total_bookings,
+            "activeBookings": active_bookings,
+            "completedBookings": completed_bookings
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -108,7 +128,10 @@ def add_driver():
             "email": driver.email,
             "phone": driver.phone,
             "licenseNumber": driver.licenseNumber,
-            "assignedVehicles": []
+            "assignedVehicles": [],
+            "totalBookings": 0,
+            "activeBookings": 0,
+            "completedBookings": 0
         }), 201
     except Exception as e:
         db.session.rollback()
@@ -152,6 +175,15 @@ def update_driver(driver_id):
                 "type": vehicle.type
             })
         
+        # Calculate booking statistics with safe counting
+        total_bookings = safe_count(Service.query.filter_by(driver_id=driver.id).join(Booking).count())
+        active_bookings = safe_count(Service.query.filter_by(driver_id=driver.id).join(Booking).filter(
+            Booking.status.in_(["pending", "confirmed"])
+        ).count())
+        completed_bookings = safe_count(Service.query.filter_by(driver_id=driver.id).join(Booking).filter(
+            Booking.status == "completed"
+        ).count())
+        
         return jsonify({
             "id": driver.id,
             "firstName": driver.firstName,
@@ -159,7 +191,10 @@ def update_driver(driver_id):
             "email": driver.email,
             "phone": driver.phone,
             "licenseNumber": driver.licenseNumber,
-            "assignedVehicles": assigned_vehicles
+            "assignedVehicles": assigned_vehicles,
+            "totalBookings": total_bookings,
+            "activeBookings": active_bookings,
+            "completedBookings": completed_bookings
         })
     except Exception as e:
         db.session.rollback()
@@ -211,10 +246,10 @@ def delete_driver(driver_id):
     try:
         driver = Driver.query.get_or_404(driver_id)
         
-        # Check if driver has active bookings
-        active_bookings = Service.query.filter_by(driver_id=driver_id).join(Booking).filter(
+        # Check if driver has active bookings with safe counting
+        active_bookings = safe_count(Service.query.filter_by(driver_id=driver_id).join(Booking).filter(
             Booking.status.in_(["pending", "confirmed"])
-        ).count()
+        ).count())
         
         if active_bookings > 0:
             return jsonify({"error": f"Cannot delete driver with {active_bookings} active bookings"}), 400
@@ -229,9 +264,6 @@ def delete_driver(driver_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
-
-
-
 
 # New endpoint to get driver schedule/calendar data
 @drivers_bp.route("/drivers/<int:driver_id>/schedule", methods=["GET"])
