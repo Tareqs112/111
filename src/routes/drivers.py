@@ -212,7 +212,7 @@ def delete_driver(driver_id):
         driver = Driver.query.get_or_404(driver_id)
         
         # Check if driver has active bookings
-        active_bookings = Booking.query.filter_by(driver_id=driver_id).filter(
+        active_bookings = Service.query.filter_by(driver_id=driver_id).join(Booking).filter(
             Booking.status.in_(["pending", "confirmed"])
         ).count()
         
