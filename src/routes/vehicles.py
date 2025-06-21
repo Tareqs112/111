@@ -16,12 +16,30 @@ def get_vehicles():
             
             availability = "Available" if active_services == 0 else "Booked"
             
+            # Calculate booking statistics for the vehicle
+            total_bookings = Service.query.filter_by(vehicle_id=vehicle.id).join(Booking).count()
+            active_bookings = Service.query.filter_by(vehicle_id=vehicle.id).join(Booking).filter(
+                Booking.status.in_(["pending", "confirmed"])
+            ).count()
+            completed_bookings = Service.query.filter_by(vehicle_id=vehicle.id).join(Booking).filter(
+                Booking.status == "completed"
+            ).count()
+            
             # Get assigned driver (permanent assignment)
             assigned_driver = None
             assigned_driver_id = None
             if vehicle.assigned_driver:
                 assigned_driver = f"{vehicle.assigned_driver.firstName} {vehicle.assigned_driver.lastName}"
                 assigned_driver_id = vehicle.assigned_driver.id
+            
+            # Calculate booking statistics for the vehicle
+            total_bookings = Service.query.filter_by(vehicle_id=vehicle.id).join(Booking).count()
+            active_bookings = Service.query.filter_by(vehicle_id=vehicle.id).join(Booking).filter(
+                Booking.status.in_(["pending", "confirmed"])
+            ).count()
+            completed_bookings = Service.query.filter_by(vehicle_id=vehicle.id).join(Booking).filter(
+                Booking.status == "completed"
+            ).count()
             
             result.append({
                 "id": vehicle.id,
@@ -31,7 +49,10 @@ def get_vehicles():
                 "capacity": vehicle.capacity,
                 "assignedDriver": assigned_driver,
                 "assignedDriverId": assigned_driver_id,
-                "availability": availability
+                "availability": availability,
+                "totalBookings": total_bookings,
+                "activeBookings": active_bookings,
+                "completedBookings": completed_bookings
             })
         return jsonify(result)
     except Exception as e:
@@ -263,4 +284,126 @@ def get_available_drivers():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
+
+# New endpoint to get vehicle schedule/calendar data
+@vehicles_bp.route("/vehicles/<int:vehicle_id>/schedule", methods=["GET"])
+def get_vehicle_schedule(vehicle_id):
+    try:
+        from datetime import datetime, timedelta
+        
+        vehicle = Vehicle.query.get_or_404(vehicle_id)
+        
+        # Get date range from query parameters (default to current month)
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        
+        if not start_date:
+            # Default to current month
+            today = datetime.now().date()
+            start_date = today.replace(day=1)
+        else:
+            start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+            
+        if not end_date:
+            # Default to end of current month
+            if start_date.month == 12:
+                end_date = start_date.replace(year=start_date.year + 1, month=1, day=1) - timedelta(days=1)
+            else:
+                end_date = start_date.replace(month=start_date.month + 1, day=1) - timedelta(days=1)
+        else:
+            end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+        
+        # Get all services for this vehicle within the date range
+        services = Service.query.filter_by(vehicle_id=vehicle_id).join(Booking).filter(
+            Service.startDate >= start_date,
+            Service.endDate <= end_date,
+            Booking.status.in_(["pending", "confirmed", "completed"])
+        ).all()
+        
+        schedule_data = []
+        for service in services:
+            schedule_data.append({
+                "id": service.id,
+                "title": service.serviceName,
+                "start": service.startDate.isoformat(),
+                "end": service.endDate.isoformat(),
+                "startTime": service.startTime.strftime("%H:%M") if service.startTime else None,
+                "endTime": service.endTime.strftime("%H:%M") if service.endTime else None,
+                "serviceType": service.serviceType,
+                "bookingId": service.booking_id,
+                "bookingStatus": service.booking_ref.status,
+                "clientName": f"{service.booking_ref.client_ref.firstName} {service.booking_ref.client_ref.lastName}" if service.booking_ref.client_ref else "Unknown",
+                "driverInfo": f"{service.driver_ref.firstName} {service.driver_ref.lastName}" if service.driver_ref else None,
+                "notes": service.notes
+            })
+        
+        return jsonify({
+            "vehicleId": vehicle_id,
+            "vehicleName": f"{vehicle.model} - {vehicle.plateNumber}",
+            "startDate": start_date.isoformat(),
+            "endDate": end_date.isoformat(),
+            "schedule": schedule_data
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# New endpoint to get all vehicles with their current booking status
+@vehicles_bp.route("/vehicles/status", methods=["GET"])
+def get_vehicles_status():
+    try:
+        from datetime import datetime, date
+        
+        vehicles = Vehicle.query.all()
+        result = []
+        
+        today = date.today()
+        
+        for vehicle in vehicles:
+            # Check if vehicle has any active bookings today
+            active_today = Service.query.filter_by(vehicle_id=vehicle.id).join(Booking).filter(
+                Service.startDate <= today,
+                Service.endDate >= today,
+                Booking.status.in_(["pending", "confirmed"])
+            ).first()
+            
+            # Get next upcoming booking
+            next_booking = Service.query.filter_by(vehicle_id=vehicle.id).join(Booking).filter(
+                Service.startDate > today,
+                Booking.status.in_(["pending", "confirmed"])
+            ).order_by(Service.startDate.asc()).first()
+            
+            status = "available"
+            if active_today:
+                status = "busy"
+            elif next_booking:
+                status = "scheduled"
+            
+            result.append({
+                "id": vehicle.id,
+                "model": vehicle.model,
+                "plateNumber": vehicle.plateNumber,
+                "type": vehicle.type,
+                "capacity": vehicle.capacity,
+                "assignedDriver": f"{vehicle.assigned_driver.firstName} {vehicle.assigned_driver.lastName}" if vehicle.assigned_driver else None,
+                "status": status,
+                "currentBooking": {
+                    "id": active_today.id,
+                    "serviceName": active_today.serviceName,
+                    "startDate": active_today.startDate.isoformat(),
+                    "endDate": active_today.endDate.isoformat(),
+                    "clientName": f"{active_today.booking_ref.client_ref.firstName} {active_today.booking_ref.client_ref.lastName}" if active_today.booking_ref.client_ref else "Unknown"
+                } if active_today else None,
+                "nextBooking": {
+                    "id": next_booking.id,
+                    "serviceName": next_booking.serviceName,
+                    "startDate": next_booking.startDate.isoformat(),
+                    "endDate": next_booking.endDate.isoformat(),
+                    "clientName": f"{next_booking.booking_ref.client_ref.firstName} {next_booking.booking_ref.client_ref.lastName}" if next_booking.booking_ref.client_ref else "Unknown"
+                } if next_booking else None
+            })
+        
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 

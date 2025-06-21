@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from src.models.database import db, Driver, Vehicle, Booking # Moved Booking import to top
+from src.models.database import db, Driver, Vehicle, Booking, Service # Import Service model
 
 drivers_bp = Blueprint("drivers", __name__)
 
@@ -19,6 +19,15 @@ def get_drivers():
                     "type": vehicle.type
                 })
             
+            # Calculate booking statistics for the driver
+            total_bookings = Service.query.filter_by(driver_id=driver.id).join(Booking).count()
+            active_bookings = Service.query.filter_by(driver_id=driver.id).join(Booking).filter(
+                Booking.status.in_(["pending", "confirmed"])
+            ).count()
+            completed_bookings = Service.query.filter_by(driver_id=driver.id).join(Booking).filter(
+                Booking.status == "completed"
+            ).count()
+            
             result.append({
                 "id": driver.id,
                 "firstName": driver.firstName,
@@ -26,7 +35,10 @@ def get_drivers():
                 "email": driver.email,
                 "phone": driver.phone,
                 "licenseNumber": driver.licenseNumber,
-                "assignedVehicles": assigned_vehicles
+                "assignedVehicles": assigned_vehicles,
+                "totalBookings": total_bookings,
+                "activeBookings": active_bookings,
+                "completedBookings": completed_bookings
             })
         return jsonify(result)
     except Exception as e:
@@ -219,4 +231,124 @@ def delete_driver(driver_id):
         return jsonify({"error": str(e)}), 500
 
 
+
+
+# New endpoint to get driver schedule/calendar data
+@drivers_bp.route("/drivers/<int:driver_id>/schedule", methods=["GET"])
+def get_driver_schedule(driver_id):
+    try:
+        from datetime import datetime, timedelta
+        
+        driver = Driver.query.get_or_404(driver_id)
+        
+        # Get date range from query parameters (default to current month)
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        
+        if not start_date:
+            # Default to current month
+            today = datetime.now().date()
+            start_date = today.replace(day=1)
+        else:
+            start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+            
+        if not end_date:
+            # Default to end of current month
+            if start_date.month == 12:
+                end_date = start_date.replace(year=start_date.year + 1, month=1, day=1) - timedelta(days=1)
+            else:
+                end_date = start_date.replace(month=start_date.month + 1, day=1) - timedelta(days=1)
+        else:
+            end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+        
+        # Get all services for this driver within the date range
+        services = Service.query.filter_by(driver_id=driver_id).join(Booking).filter(
+            Service.startDate >= start_date,
+            Service.endDate <= end_date,
+            Booking.status.in_(["pending", "confirmed", "completed"])
+        ).all()
+        
+        schedule_data = []
+        for service in services:
+            schedule_data.append({
+                "id": service.id,
+                "title": service.serviceName,
+                "start": service.startDate.isoformat(),
+                "end": service.endDate.isoformat(),
+                "startTime": service.startTime.strftime("%H:%M") if service.startTime else None,
+                "endTime": service.endTime.strftime("%H:%M") if service.endTime else None,
+                "serviceType": service.serviceType,
+                "bookingId": service.booking_id,
+                "bookingStatus": service.booking_ref.status,
+                "clientName": f"{service.booking_ref.client_ref.firstName} {service.booking_ref.client_ref.lastName}" if service.booking_ref.client_ref else "Unknown",
+                "vehicleInfo": f"{service.vehicle_ref.model} - {service.vehicle_ref.plateNumber}" if service.vehicle_ref else None,
+                "notes": service.notes
+            })
+        
+        return jsonify({
+            "driverId": driver_id,
+            "driverName": f"{driver.firstName} {driver.lastName}",
+            "startDate": start_date.isoformat(),
+            "endDate": end_date.isoformat(),
+            "schedule": schedule_data
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# New endpoint to get all drivers with their current booking status
+@drivers_bp.route("/drivers/status", methods=["GET"])
+def get_drivers_status():
+    try:
+        from datetime import datetime, date
+        
+        drivers = Driver.query.all()
+        result = []
+        
+        today = date.today()
+        
+        for driver in drivers:
+            # Check if driver has any active bookings today
+            active_today = Service.query.filter_by(driver_id=driver.id).join(Booking).filter(
+                Service.startDate <= today,
+                Service.endDate >= today,
+                Booking.status.in_(["pending", "confirmed"])
+            ).first()
+            
+            # Get next upcoming booking
+            next_booking = Service.query.filter_by(driver_id=driver.id).join(Booking).filter(
+                Service.startDate > today,
+                Booking.status.in_(["pending", "confirmed"])
+            ).order_by(Service.startDate.asc()).first()
+            
+            status = "available"
+            if active_today:
+                status = "busy"
+            elif next_booking:
+                status = "scheduled"
+            
+            result.append({
+                "id": driver.id,
+                "firstName": driver.firstName,
+                "lastName": driver.lastName,
+                "fullName": f"{driver.firstName} {driver.lastName}",
+                "status": status,
+                "currentBooking": {
+                    "id": active_today.id,
+                    "serviceName": active_today.serviceName,
+                    "startDate": active_today.startDate.isoformat(),
+                    "endDate": active_today.endDate.isoformat(),
+                    "clientName": f"{active_today.booking_ref.client_ref.firstName} {active_today.booking_ref.client_ref.lastName}" if active_today.booking_ref.client_ref else "Unknown"
+                } if active_today else None,
+                "nextBooking": {
+                    "id": next_booking.id,
+                    "serviceName": next_booking.serviceName,
+                    "startDate": next_booking.startDate.isoformat(),
+                    "endDate": next_booking.endDate.isoformat(),
+                    "clientName": f"{next_booking.booking_ref.client_ref.firstName} {next_booking.booking_ref.client_ref.lastName}" if next_booking.booking_ref.client_ref else "Unknown"
+                } if next_booking else None
+            })
+        
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
