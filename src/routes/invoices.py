@@ -1125,3 +1125,35 @@ def download_invoice(filename):
         logging.error(f"Error downloading invoice: {e}")
         return jsonify({"error": str(e)}), 500
 
+@invoices_bp.route("/invoices/<int:invoice_id>", methods=["DELETE"])
+def delete_invoice(invoice_id):
+    """Delete an invoice by ID"""
+    try:
+        # Find the invoice
+        invoice = Invoice.query.get(invoice_id)
+        if not invoice:
+            return jsonify({"error": "Invoice not found"}), 404
+        
+        # Delete the PDF file if it exists
+        if invoice.pdfPath:
+            try:
+                # Extract filename from pdfPath
+                filename = invoice.pdfPath.split("/")[-1]
+                pdf_path = os.path.join(os.path.dirname(__file__), "invoices", filename)
+                if os.path.exists(pdf_path):
+                    os.remove(pdf_path)
+                    logging.info(f"Deleted PDF file: {pdf_path}")
+            except Exception as e:
+                logging.warning(f"Could not delete PDF file: {e}")
+        
+        # Delete the invoice from database
+        db.session.delete(invoice)
+        db.session.commit()
+        
+        logging.info(f"Invoice {invoice_id} deleted successfully")
+        return jsonify({"message": "Invoice deleted successfully"}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Error deleting invoice {invoice_id}: {e}")
+        return jsonify({"error": str(e)}), 500
