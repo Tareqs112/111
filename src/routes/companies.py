@@ -289,8 +289,42 @@ def get_company_monthly_invoice_excel(company_id):
         if year < 2020 or year > 2030:
             year = datetime.now().year
         
-        # Get all clients for this company with bookings in the specified month/year
-        clients = Client.query.filter_by(company_id=company_id).all()
+        # FIXED: Get only clients who have bookings in the specified month/year
+        # First, get all bookings for this company in the specified period
+        bookings_in_period = db.session.query(Booking).join(Client).filter(
+            Client.company_id == company_id,
+            db.extract('month', Booking.created_at) == month,
+            db.extract('year', Booking.created_at) == year
+        ).all()
+        
+        # Get unique client IDs from these bookings
+        client_ids_with_bookings = list(set([booking.client_id for booking in bookings_in_period]))
+        
+        if not client_ids_with_bookings:
+            # No bookings in this period
+            return jsonify({
+                "company": {
+                    "id": company.id,
+                    "name": getattr(company, 'name', '') or 'Unknown Company',
+                    "email": getattr(company, 'email', '') or '',
+                    "contactPerson": getattr(company, 'contactPerson', '') or ''
+                },
+                "period": {
+                    "month": month,
+                    "year": year,
+                    "monthName": datetime(year, month, 1).strftime("%B")
+                },
+                "clients": [],
+                "summary": {
+                    "totalAmount": 0.0,
+                    "totalPaid": 0.0,
+                    "totalDue": 0.0,
+                    "clientCount": 0
+                }
+            })
+        
+        # Get clients who have bookings in this period
+        clients = Client.query.filter(Client.id.in_(client_ids_with_bookings)).all()
         
         excel_data = []
         total_paid = 0
@@ -299,26 +333,24 @@ def get_company_monthly_invoice_excel(company_id):
         
         for client in clients:
             try:
-                # Get bookings for this client in the specified period
-                bookings = Booking.query.filter_by(client_id=client.id).filter(
-                    db.extract('month', Booking.created_at) == month,
-                    db.extract('year', Booking.created_at) == year
-                ).all()
+                # Get bookings for this client in the specified period only
+                client_bookings = [b for b in bookings_in_period if b.client_id == client.id]
                 
-                if not bookings:
+                if not client_bookings:
                     continue
                 
-                # Calculate client totals
+                # Calculate client totals from bookings in this period only
                 client_total = 0
                 arrival_date = None
                 
-                for booking in bookings:
+                for booking in client_bookings:
                     try:
+                        # Get the earliest arrival date from bookings in this period
                         if booking.overall_startDate:
                             if not arrival_date or booking.overall_startDate < arrival_date:
                                 arrival_date = booking.overall_startDate
                         
-                        # Safely get services
+                        # Safely get services for this booking
                         if hasattr(booking, 'services') and booking.services:
                             for service in booking.services:
                                 try:
@@ -331,14 +363,19 @@ def get_company_monthly_invoice_excel(company_id):
                         logging.warning(f"Error processing booking {booking.id}: {e}")
                         continue
                 
-                # Skip clients with no valid bookings
+                # Skip clients with no valid bookings or zero amount
                 if client_total <= 0:
                     continue
                 
-                # Check payment status (simplified for now)
-                # In real implementation, you'd check against payment records
+                # Get payment status (check if client has payment tracking fields)
                 payment_status = "pending"
                 paid_amount = 0
+                
+                # Check if client has payment tracking fields
+                if hasattr(client, 'paymentStatus'):
+                    payment_status = getattr(client, 'paymentStatus', 'pending') or 'pending'
+                if hasattr(client, 'paidAmount'):
+                    paid_amount = float(getattr(client, 'paidAmount', 0) or 0)
                 
                 # Create safe client name
                 client_name = "Unknown Client"
@@ -361,7 +398,8 @@ def get_company_monthly_invoice_excel(company_id):
                     "dueAmount": float(client_total - paid_amount),
                     "paymentStatus": payment_status,
                     "email": getattr(client, 'email', '') or '',
-                    "phone": getattr(client, 'phone', '') or ''
+                    "phone": getattr(client, 'phone', '') or '',
+                    "bookingCount": len(client_bookings)  # Number of bookings in this period
                 })
                 
                 total_amount += client_total
@@ -518,4 +556,146 @@ def update_client_payment_status(company_id, client_id):
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+
+# NEW FEATURE: Update payment status for a client
+@companies_bp.route("/companies/<int:company_id>/clients/<int:client_id>/payment", methods=["PUT"])
+def update_client_payment_status(company_id, client_id):
+    """Update payment status for a specific client"""
+    try:
+        company = Company.query.get_or_404(company_id)
+        client = Client.query.filter_by(id=client_id, company_id=company_id).first_or_404()
+        
+        data = request.get_json()
+        
+        # Validate required fields
+        if 'paidAmount' not in data or 'paymentStatus' not in data:
+            return jsonify({"error": "paidAmount and paymentStatus are required"}), 400
+        
+        # Update client payment information
+        # Note: You might need to add these fields to your Client model
+        # For now, we'll store this in a separate payment tracking table or update existing fields
+        
+        # If you have payment tracking fields in Client model:
+        if hasattr(client, 'paidAmount'):
+            client.paidAmount = float(data['paidAmount'])
+        if hasattr(client, 'paymentStatus'):
+            client.paymentStatus = data['paymentStatus']
+        if hasattr(client, 'paymentDate') and data.get('paymentDate'):
+            client.paymentDate = datetime.strptime(data['paymentDate'], '%Y-%m-%d').date()
+        
+        db.session.commit()
+        
+        logging.info(f"Payment status updated for client {client_id}: {data['paymentStatus']}, amount: {data['paidAmount']}")
+        
+        return jsonify({
+            "message": "Payment status updated successfully",
+            "clientId": client.id,
+            "paidAmount": float(data['paidAmount']),
+            "paymentStatus": data['paymentStatus']
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Error updating payment status for client {client_id}: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+# NEW FEATURE: Get simplified client list (without service details)
+@companies_bp.route("/companies/<int:company_id>/clients/simple", methods=["GET"])
+def get_company_clients_simple(company_id):
+    """Get simplified client list for a company without service details"""
+    try:
+        company = Company.query.get_or_404(company_id)
+        
+        # Get query parameters for filtering
+        month = request.args.get('month', type=int)
+        year = request.args.get('year', type=int)
+        
+        # Base query for clients
+        clients_query = Client.query.filter_by(company_id=company_id)
+        
+        # If month and year are provided, filter by booking dates
+        if month and year:
+            clients_query = clients_query.join(Booking).filter(
+                db.extract('month', Booking.created_at) == month,
+                db.extract('year', Booking.created_at) == year
+            ).distinct()
+        
+        clients = clients_query.all()
+        
+        result = []
+        for client in clients:
+            try:
+                # Get basic client info
+                client_data = {
+                    "id": client.id,
+                    "firstName": getattr(client, 'firstName', '') or '',
+                    "lastName": getattr(client, 'lastName', '') or '',
+                    "email": getattr(client, 'email', '') or '',
+                    "phone": getattr(client, 'phone', '') or '',
+                    "createdAt": client.created_at.isoformat() if hasattr(client, 'created_at') and client.created_at else None,
+                }
+                
+                # Add payment info if available
+                if hasattr(client, 'paidAmount'):
+                    client_data["paidAmount"] = float(getattr(client, 'paidAmount', 0) or 0)
+                if hasattr(client, 'paymentStatus'):
+                    client_data["paymentStatus"] = getattr(client, 'paymentStatus', 'pending') or 'pending'
+                if hasattr(client, 'paymentDate'):
+                    payment_date = getattr(client, 'paymentDate', None)
+                    client_data["paymentDate"] = payment_date.isoformat() if payment_date else None
+                
+                # Calculate total amount from bookings (simplified)
+                total_amount = 0
+                bookings = Booking.query.filter_by(client_id=client.id).all()
+                for booking in bookings:
+                    if hasattr(booking, 'services') and booking.services:
+                        for service in booking.services:
+                            if hasattr(service, 'totalSellingPrice') and service.totalSellingPrice:
+                                total_amount += float(service.totalSellingPrice)
+                
+                client_data["totalAmount"] = float(total_amount)
+                
+                result.append(client_data)
+                
+            except Exception as e:
+                logging.warning(f"Error processing client {client.id}: {e}")
+                continue
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        logging.error(f"Error fetching simple clients for company {company_id}: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+# UPDATED FEATURE: Get companies with updated client count
+@companies_bp.route("/companies/with-counts", methods=["GET"])
+def get_companies_with_updated_counts():
+    """Get all companies with real-time updated client counts"""
+    try:
+        companies = Company.query.all()
+        result = []
+        for company in companies:
+            try:
+                # Get real-time client count
+                client_count = Client.query.filter_by(company_id=company.id).count()
+                
+                result.append({
+                    "id": company.id,
+                    "name": getattr(company, 'name', '') or 'Unknown Company',
+                    "contactPerson": getattr(company, 'contactPerson', '') or '',
+                    "email": getattr(company, 'email', '') or '',
+                    "phone": getattr(company, 'phone', '') or '',
+                    "logoPath": getattr(company, 'logoPath', '') or '',
+                    "clientCount": client_count
+                })
+            except Exception as e:
+                logging.warning(f"Error processing company {company.id}: {e}")
+                continue
+        
+        return jsonify(result), 200
+    except Exception as e:
+        logging.error(f"Error fetching companies with counts: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
