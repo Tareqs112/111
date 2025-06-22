@@ -529,35 +529,6 @@ def add_client_to_company(company_id):
         logging.error(f"Error adding client to company: {e}")
         return jsonify({"error": str(e)}), 500
 
-# NEW FEATURE: Update payment status for a client
-@companies_bp.route("/companies/<int:company_id>/clients/<int:client_id>/payment", methods=["PUT"])
-def update_client_payment_status(company_id, client_id):
-    """Update payment status for a specific client"""
-    try:
-        company = Company.query.get_or_404(company_id)
-        client = Client.query.filter_by(id=client_id, company_id=company_id).first_or_404()
-        
-        data = request.get_json()
-        paid_amount = data.get("paidAmount", 0)
-        payment_status = data.get("paymentStatus", "pending")
-        payment_date = data.get("paymentDate")
-        
-        # Here you would update your payment tracking system
-        # For now, we'll just return success
-        # In a real implementation, you'd have a Payment model to track this
-        
-        return jsonify({
-            "message": "Payment status updated successfully",
-            "clientId": client_id,
-            "paidAmount": paid_amount,
-            "paymentStatus": payment_status,
-            "paymentDate": payment_date
-        })
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
 
 # NEW FEATURE: Update payment status for a client
 @companies_bp.route("/companies/<int:company_id>/clients/<int:client_id>/payment", methods=["PUT"])
