@@ -289,12 +289,13 @@ def get_company_monthly_invoice_excel(company_id):
         if year < 2020 or year > 2030:
             year = datetime.now().year
         
-        # FIXED: Get only clients who have bookings in the specified month/year
-        # First, get all bookings for this company in the specified period
+        # FIXED: Get only clients who have bookings with arrival dates in the specified month/year
+        # Use overall_startDate (arrival date) instead of created_at
         bookings_in_period = db.session.query(Booking).join(Client).filter(
             Client.company_id == company_id,
-            db.extract('month', Booking.created_at) == month,
-            db.extract('year', Booking.created_at) == year
+            Booking.overall_startDate.isnot(None),  # Ensure arrival date exists
+            db.extract('month', Booking.overall_startDate) == month,
+            db.extract('year', Booking.overall_startDate) == year
         ).all()
         
         # Get unique client IDs from these bookings
