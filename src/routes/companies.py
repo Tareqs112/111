@@ -166,7 +166,11 @@ def get_company_clients(company_id):
                 "clientName": f"{client.firstName} {client.lastName}",
                 "email": client.email,
                 "services": client_services,
-                "totalAmount": total_selling_price
+                "totalAmount": total_selling_price,
+                "paidAmount": float(client.paidAmount or 0),
+                "dueAmount": total_selling_price - float(client.paidAmount or 0),
+                "paymentStatus": client.paymentStatus or "pending",
+                "paymentDate": client.paymentDate.isoformat() if client.paymentDate else None
             })
         
         return jsonify({
@@ -251,7 +255,11 @@ def get_company_clients_detailed(company_id):
                     "email": client.email,
                     "arrivalDate": arrival_date.isoformat(),
                     "services": client_services,
-                    "totalSellingPrice": client_total_selling_price
+                    "totalSellingPrice": client_total_selling_price,
+                    "paidAmount": float(client.paidAmount or 0),
+                    "dueAmount": client_total_selling_price - float(client.paidAmount or 0),
+                    "paymentStatus": client.paymentStatus or "pending",
+                    "paymentDate": client.paymentDate.isoformat() if client.paymentDate else None
                 })
                 total_company_revenue += client_total_selling_price
         
@@ -610,4 +618,39 @@ def get_company_clients_simple(company_id):
     except Exception as e:
         logging.error(f"Error in get_company_clients_simple: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+
+@companies_bp.route("/companies/<int:company_id>/clients/<int:client_id>/payment", methods=["PUT"])
+def update_client_payment(company_id, client_id):
+    try:
+        company = Company.query.get_or_404(company_id)
+        client = Client.query.filter_by(id=client_id, company_id=company_id).first_or_404()
+        data = request.get_json()
+
+        paid_amount = float(data.get("paidAmount", 0))
+        payment_status = data.get("paymentStatus", "pending")
+        payment_date_str = data.get("paymentDate")
+
+        if payment_date_str:
+            payment_date = datetime.strptime(payment_date_str, "%Y-%m-%d").date()
+        else:
+            payment_date = None
+
+        client.paidAmount = paid_amount
+        client.paymentStatus = payment_status
+        client.paymentDate = payment_date
+
+        db.session.commit()
+
+        return jsonify({
+            "clientId": client.id,
+            "paidAmount": client.paidAmount,
+            "paymentStatus": client.paymentStatus,
+            "paymentDate": client.paymentDate.isoformat() if client.paymentDate else None
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
 

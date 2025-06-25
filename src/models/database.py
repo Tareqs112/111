@@ -12,6 +12,9 @@ class Client(db.Model):
     address = db.Column(db.Text)
     company_id = db.Column(db.Integer, db.ForeignKey("company.id"), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    paidAmount = db.Column(db.Float, nullable=True, default=0.0)
+    paymentStatus = db.Column(db.String(20), default="pending")  # pending, paid, overdue
+    paymentDate = db.Column(db.Date, nullable=True)
     
     # Relationships
     company = db.relationship("Company", backref="clients", lazy=True)
