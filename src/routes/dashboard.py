@@ -35,20 +35,20 @@ def get_dashboard_summary():
         # Upcoming bookings (next 7 days)
         next_week = today + timedelta(days=7)
         upcoming_bookings_count = Booking.query.filter(
-            Booking.overall_startDate >= today,
-            Booking.overall_startDate <= next_week,
+            Booking.overall_start_date >= today,
+            Booking.overall_start_date <= next_week,
             Booking.status.in_(["pending", "confirmed"])
         ).count()
         
         # Total revenue for selected month - calculate in Python, not in SQL
         bookings_this_month = Booking.query.filter(
-            Booking.overall_startDate >= month_start,
-            Booking.overall_startDate <= month_end,
+            Booking.overall_start_date >= month_start,
+            Booking.overall_start_date <= month_end,
             Booking.status.in_(["confirmed", "completed"])
         ).all()
         
         # Calculate revenue and profit in Python after fetching the records
-        total_revenue = sum(booking.totalSellingPrice for booking in bookings_this_month)
+        total_revenue = sum(booking.total_selling_price for booking in bookings_this_month)
         total_profit = sum(booking.profit for booking in bookings_this_month)
         
         # Active clients
@@ -85,9 +85,9 @@ def get_detailed_stats():
         
         # Service type breakdown
         service_types_query = db.session.query(
-            Service.serviceType,
+            Service.service_type,
             func.count(Service.id)
-        ).group_by(Service.serviceType).all()
+        ).group_by(Service.service_type).all()
         
         service_breakdown = {service_type: count for service_type, count in service_types_query}
         
@@ -102,13 +102,13 @@ def get_detailed_stats():
             
             # Get bookings for this month
             month_bookings = Booking.query.filter(
-                Booking.overall_startDate >= month_start,
-                Booking.overall_startDate <= month_end,
+                Booking.overall_start_date >= month_start,
+                Booking.overall_start_date <= month_end,
                 Booking.status.in_(["confirmed", "completed"])
             ).all()
             
             # Calculate revenue in Python
-            revenue = sum(booking.totalSellingPrice for booking in month_bookings)
+            revenue = sum(booking.total_selling_price for booking in month_bookings)
             
             monthly_revenue.append({
                 "month": month_start.strftime("%Y-%m"),
@@ -144,10 +144,10 @@ def get_upcoming_bookings():
         
         # Get upcoming bookings directly from the Booking table
         upcoming_bookings = Booking.query.filter(
-            Booking.overall_startDate >= today,
-            Booking.overall_startDate <= next_week,
+            Booking.overall_start_date >= today,
+            Booking.overall_start_date <= next_week,
             Booking.status.in_(["pending", "confirmed"])
-        ).order_by(Booking.overall_startDate.asc()).all()
+        ).order_by(Booking.overall_start_date.asc()).all()
         
         # Debug: Print number of bookings found
         print(f"Found {len(upcoming_bookings)} upcoming bookings")
@@ -158,15 +158,15 @@ def get_upcoming_bookings():
             if not booking.client_ref:
                 continue
                 
-            client_name = f"{booking.client_ref.firstName} {booking.client_ref.lastName}"
+            client_name = f"{booking.client_ref.first_name} {booking.client_ref.last_name}"
             
             # Debug: Print booking details
-            print(f"Processing booking {booking.id} for client {client_name} on {booking.overall_startDate}")
+            print(f"Processing booking {booking.id} for client {client_name} on {booking.overall_start_date}")
             
             upcoming_data.append({
                 "id": booking.id,
                 "client": client_name,
-                "startDate": booking.overall_startDate.isoformat() if booking.overall_startDate else None
+                "startDate": booking.overall_start_date.isoformat() if booking.overall_start_date else None
             })
         
         # Debug: Print final data
@@ -185,20 +185,20 @@ def get_todays_bookings():
         # Get bookings where overall_startDate is today
         # Order by overall_startDate (already today) and then by client name for consistency
         todays_bookings_overall = Booking.query.filter(
-            Booking.overall_startDate == today,
+            Booking.overall_start_date == today,
             Booking.status.in_(["pending", "confirmed", "completed"])
-        ).order_by(Booking.overall_startDate.asc(), Client.firstName.asc(), Client.lastName.asc()).join(Client, Booking.client_id == Client.id).all()
+        ).order_by(Booking.overall_start_date.asc(), Client.first_name.asc(), Client.last_name.asc()).join(Client, Booking.client_id == Client.id).all()
         
         todays_data = []
         for booking in todays_bookings_overall:
-            client_name = f"{booking.client_ref.firstName} {booking.client_ref.lastName}" if booking.client_ref else "Unknown Client"
+            client_name = f"{booking.client_ref.first_name} {booking.client_ref.last_name}" if booking.client_ref else "Unknown Client"
             
-            # For today's bookings, we only need the client name and the overall_startDate
+            # For today\'s bookings, we only need the client name and the overall_startDate
             # The services are not needed for the simplified display
             todays_data.append({
                 "id": booking.id,
                 "client": client_name,
-                "startDate": booking.overall_startDate.isoformat() if booking.overall_startDate else None
+                "startDate": booking.overall_start_date.isoformat() if booking.overall_start_date else None
             })
         
         return jsonify(todays_data)
@@ -211,32 +211,32 @@ def get_accommodation_stats():
     try:
         # Get accommodation bookings
         accommodation_services = Service.query.filter(
-            Service.serviceType.in_(["Hotel", "Cabin"])
+            Service.service_type.in_(["Hotel", "Cabin"])
         ).all()
         
         # Calculate accommodation-specific stats
-        total_nights = sum(service.numNights for service in accommodation_services if service.numNights)
-        total_accommodation_revenue = sum(service.totalSellingPrice for service in accommodation_services)
-        total_accommodation_cost = sum(service.totalCost for service in accommodation_services)
+        total_nights = sum(service.num_nights for service in accommodation_services if service.num_nights)
+        total_accommodation_revenue = sum(service.total_selling_price for service in accommodation_services)
+        total_accommodation_cost = sum(service.total_cost for service in accommodation_services)
         total_accommodation_profit = total_accommodation_revenue - total_accommodation_cost
         
         # Group by hotel/cabin name
         accommodation_breakdown = {}
         for service in accommodation_services:
-            if service.hotelName:
-                if service.hotelName not in accommodation_breakdown:
-                    accommodation_breakdown[service.hotelName] = {
-                        "type": service.serviceType,
+            if service.hotel_name:
+                if service.hotel_name not in accommodation_breakdown:
+                    accommodation_breakdown[service.hotel_name] = {
+                        "type": service.service_type,
                         "bookings": 0,
                         "nights": 0,
                         "revenue": 0,
                         "profit": 0
                     }
                 
-                accommodation_breakdown[service.hotelName]["bookings"] += 1
-                accommodation_breakdown[service.hotelName]["nights"] += service.numNights or 0
-                accommodation_breakdown[service.hotelName]["revenue"] += service.totalSellingPrice
-                accommodation_breakdown[service.hotelName]["profit"] += service.profit
+                accommodation_breakdown[service.hotel_name]["bookings"] += 1
+                accommodation_breakdown[service.hotel_name]["nights"] += service.num_nights or 0
+                accommodation_breakdown[service.hotel_name]["revenue"] += service.total_selling_price
+                accommodation_breakdown[service.hotel_name]["profit"] += service.profit
         
         return jsonify({
             "totalNights": total_nights,
@@ -248,6 +248,8 @@ def get_accommodation_stats():
     except Exception as e:
         traceback.print_exc() # Print full traceback to console
         return jsonify({"error": str(e)}), 500
+
+
 
 
 
