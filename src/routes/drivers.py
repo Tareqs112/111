@@ -1,386 +1,273 @@
-from flask import Blueprint, request, jsonify
-from src.models.database import db, Driver, Vehicle, Booking, Service # Import Service model
+from src.extensions import db
+from datetime import datetime, date, time
 
-drivers_bp = Blueprint("drivers", __name__)
+class Client(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    firstName = db.Column(db.String(100), nullable=False)
+    lastName = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(120), nullable=True)  # Made nullable
+    phone = db.Column(db.String(20), nullable=True)  # Made nullable
+    passportNumber = db.Column(db.String(50), nullable=True)  # New field
+    licenseNumber = db.Column(db.String(50), nullable=True)  # New field
+    address = db.Column(db.Text)
+    company_id = db.Column(db.Integer, db.ForeignKey("company.id"), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    paid_amount = db.Column(db.Float, nullable=True, default=0.0)
+    payment_status = db.Column(db.String(20), default="pending")  # pending, paid, overdue
+    payment_date = db.Column(db.Date, nullable=True)
+    
+    # Relationships
+    company = db.relationship("Company", backref="clients", lazy=True)
+    bookings = db.relationship("Booking", backref="client_ref", lazy=True)
 
-def safe_count(query_result):
-    """دالة مساعدة لضمان إرجاع رقم صحيح بدلاً من None"""
-    try:
-        result = query_result
-        return result if result is not None else 0
-    except Exception:
-        return 0
+class Company(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=True)
+    phone = db.Column(db.String(20), nullable=True)
+    address = db.Column(db.Text)
+    contactPerson = db.Column(db.String(100), nullable=True)
+    logoPath = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-@drivers_bp.route("/drivers", methods=["GET"])
-def get_drivers():
-    try:
-        drivers = Driver.query.all()
-        result = []
-        for driver in drivers:
-            # Get assigned vehicles
-            assigned_vehicles = []
-            for vehicle in driver.assigned_vehicles:
-                assigned_vehicles.append({
-                    "id": vehicle.id,
-                    "model": vehicle.model,
-                    "plateNumber": vehicle.plateNumber,
-                    "type": vehicle.type
-                })
-            
-            # Calculate booking statistics for the driver with safe counting
-            total_bookings = safe_count(Service.query.filter_by(driver_id=driver.id).join(Booking).count())
-            active_bookings = safe_count(Service.query.filter_by(driver_id=driver.id).join(Booking).filter(
-                Booking.status.in_(["pending", "confirmed"])
-            ).count())
-            completed_bookings = safe_count(Service.query.filter_by(driver_id=driver.id).join(Booking).filter(
-                Booking.status == "completed"
-            ).count())
-            
-            result.append({
-                "id": driver.id,
-                "firstName": driver.firstName,
-                "lastName": driver.lastName,
-                "email": driver.email,
-                "phone": driver.phone,
-                "licenseNumber": driver.licenseNumber,
-                "assignedVehicles": assigned_vehicles,
-                "totalBookings": total_bookings,
-                "activeBookings": active_bookings,
-                "completedBookings": completed_bookings
-            })
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+class Driver(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    firstName = db.Column(db.String(100), nullable=False)
+    lastName = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    phone = db.Column(db.String(20), nullable=False)
+    licenseNumber = db.Column(db.String(50), unique=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationship
+    assigned_vehicles = db.relationship("Vehicle", backref="assigned_driver", lazy=True)
+    services = db.relationship("Service", backref="driver_ref", lazy=True)
 
-@drivers_bp.route("/drivers/<int:driver_id>", methods=["GET"])
-def get_driver(driver_id):
-    try:
-        driver = Driver.query.get_or_404(driver_id)
-        
-        # Get assigned vehicles
-        assigned_vehicles = []
-        for vehicle in driver.assigned_vehicles:
-            assigned_vehicles.append({
-                "id": vehicle.id,
-                "model": vehicle.model,
-                "plateNumber": vehicle.plateNumber,
-                "type": vehicle.type
-            })
-        
-        # Calculate booking statistics with safe counting
-        total_bookings = safe_count(Service.query.filter_by(driver_id=driver.id).join(Booking).count())
-        active_bookings = safe_count(Service.query.filter_by(driver_id=driver.id).join(Booking).filter(
-            Booking.status.in_(["pending", "confirmed"])
-        ).count())
-        completed_bookings = safe_count(Service.query.filter_by(driver_id=driver.id).join(Booking).filter(
-            Booking.status == "completed"
-        ).count())
-        
-        return jsonify({
-            "id": driver.id,
-            "firstName": driver.firstName,
-            "lastName": driver.lastName,
-            "email": driver.email,
-            "phone": driver.phone,
-            "licenseNumber": driver.licenseNumber,
-            "assignedVehicles": assigned_vehicles,
-            "totalBookings": total_bookings,
-            "activeBookings": active_bookings,
-            "completedBookings": completed_bookings
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+class Vehicle(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    model = db.Column(db.String(100), nullable=False)
+    plateNumber = db.Column(db.String(20), unique=True, nullable=False)
+    type = db.Column(db.String(50), nullable=False)  # Sedan, SUV, Van, Bus, etc.
+    capacity = db.Column(db.Integer, nullable=False)
+    assigned_driver_id = db.Column(db.Integer, db.ForeignKey("driver.id"), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationship
+    services = db.relationship("Service", backref="vehicle_ref", lazy=True)
 
-@drivers_bp.route("/drivers", methods=["POST"])
-def add_driver():
-    try:
-        data = request.get_json()
-        
-        # Validate required fields
-        if not data.get("firstName") or not data.get("lastName") or not data.get("email") or not data.get("licenseNumber"):
-            return jsonify({"error": "First name, last name, email, and license number are required"}), 400
-        
-        # Check if email already exists
-        existing_driver = Driver.query.filter_by(email=data["email"]).first()
-        if existing_driver:
-            return jsonify({"error": "Email already exists"}), 400
-        
-        # Check if license number already exists
-        existing_license = Driver.query.filter_by(licenseNumber=data["licenseNumber"]).first()
-        if existing_license:
-            return jsonify({"error": "License number already exists"}), 400
-        
-        driver = Driver(
-            firstName=data["firstName"],
-            lastName=data["lastName"],
-            email=data["email"],
-            phone=data.get("phone"),
-            licenseNumber=data["licenseNumber"]
-        )
-        
-        db.session.add(driver)
-        db.session.commit()
-        
-        return jsonify({
-            "id": driver.id,
-            "firstName": driver.firstName,
-            "lastName": driver.lastName,
-            "email": driver.email,
-            "phone": driver.phone,
-            "licenseNumber": driver.licenseNumber,
-            "assignedVehicles": [],
-            "totalBookings": 0,
-            "activeBookings": 0,
-            "completedBookings": 0
-        }), 201
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"error": str(e)}), 500
+class Booking(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey("client.id"), nullable=False)
+    
+    # Overall booking details
+    overall_startDate = db.Column(db.Date, nullable=False)
+    overall_endDate = db.Column(db.Date, nullable=False)
+    notes = db.Column(db.Text)
+    status = db.Column(db.String(20), default="pending")  # pending, confirmed, completed, cancelled
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    services = db.relationship("Service", backref="booking_ref", lazy=True, cascade="all, delete-orphan")
+    invoices = db.relationship("Invoice", backref="booking", lazy=True, cascade="all, delete-orphan")
 
-@drivers_bp.route("/drivers/<int:driver_id>", methods=["PUT"])
-def update_driver(driver_id):
-    try:
-        driver = Driver.query.get_or_404(driver_id)
-        data = request.get_json()
-        
-        # Validate required fields
-        if not data.get("firstName") or not data.get("lastName") or not data.get("email") or not data.get("licenseNumber"):
-            return jsonify({"error": "First name, last name, email, and license number are required"}), 400
-        
-        # Check if email already exists (excluding current driver)
-        existing_driver = Driver.query.filter(Driver.email == data["email"], Driver.id != driver_id).first()
-        if existing_driver:
-            return jsonify({"error": "Email already exists"}), 400
-        
-        # Check if license number already exists (excluding current driver)
-        existing_license = Driver.query.filter(Driver.licenseNumber == data["licenseNumber"], Driver.id != driver_id).first()
-        if existing_license:
-            return jsonify({"error": "License number already exists"}), 400
-        
-        driver.firstName = data["firstName"]
-        driver.lastName = data["lastName"]
-        driver.email = data["email"]
-        driver.phone = data.get("phone")
-        driver.licenseNumber = data["licenseNumber"]
-        
-        db.session.commit()
-        
-        # Get assigned vehicles
-        assigned_vehicles = []
-        for vehicle in driver.assigned_vehicles:
-            assigned_vehicles.append({
-                "id": vehicle.id,
-                "model": vehicle.model,
-                "plateNumber": vehicle.plateNumber,
-                "type": vehicle.type
-            })
-        
-        # Calculate booking statistics with safe counting
-        total_bookings = safe_count(Service.query.filter_by(driver_id=driver.id).join(Booking).count())
-        active_bookings = safe_count(Service.query.filter_by(driver_id=driver.id).join(Booking).filter(
-            Booking.status.in_(["pending", "confirmed"])
-        ).count())
-        completed_bookings = safe_count(Service.query.filter_by(driver_id=driver.id).join(Booking).filter(
-            Booking.status == "completed"
-        ).count())
-        
-        return jsonify({
-            "id": driver.id,
-            "firstName": driver.firstName,
-            "lastName": driver.lastName,
-            "email": driver.email,
-            "phone": driver.phone,
-            "licenseNumber": driver.licenseNumber,
-            "assignedVehicles": assigned_vehicles,
-            "totalBookings": total_bookings,
-            "activeBookings": active_bookings,
-            "completedBookings": completed_bookings
-        })
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"error": str(e)}), 500
+    @property
+    def client(self):
+        """Get client name for display"""
+        if self.client_ref:
+            return f"{self.client_ref.firstName} {self.client_ref.lastName}"
+        return "Unknown Client"
+    
+    @property
+    def totalCost(self):
+        """Calculate total cost of all services in the booking"""
+        return sum(service.totalCost for service in self.services)
+    
+    @property
+    def totalSellingPrice(self):
+        """Calculate total selling price of all services in the booking"""
+        return sum(service.totalSellingPrice for service in self.services)
+    
+    @property
+    def profit(self):
+        """Calculate total profit of all services in the booking"""
+        return self.totalSellingPrice - self.totalCost
 
-@drivers_bp.route("/drivers/<int:driver_id>/assign-vehicles", methods=["PUT"])
-def assign_vehicles_to_driver(driver_id):
-    try:
-        driver = Driver.query.get_or_404(driver_id)
-        data = request.get_json()
-        
-        vehicle_ids = data.get("vehicleIds", [])
-        
-        # Clear current assignments for this driver
-        for vehicle in driver.assigned_vehicles:
-            vehicle.assigned_driver_id = None
-        
-        # Assign new vehicles
-        for vehicle_id in vehicle_ids:
-            vehicle = Vehicle.query.get(vehicle_id)
-            if vehicle:
-                # Check if vehicle is already assigned to another driver
-                if vehicle.assigned_driver_id and vehicle.assigned_driver_id != driver_id:
-                    return jsonify({"error": f"Vehicle {vehicle.model} - {vehicle.plateNumber} is already assigned to another driver"}), 400
-                vehicle.assigned_driver_id = driver_id
-        
-        db.session.commit()
-        
-        # Get updated assigned vehicles
-        assigned_vehicles = []
-        for vehicle in driver.assigned_vehicles:
-            assigned_vehicles.append({
-                "id": vehicle.id,
-                "model": vehicle.model,
-                "plateNumber": vehicle.plateNumber,
-                "type": vehicle.type
-            })
-        
-        return jsonify({
-            "message": "Vehicle assignment updated successfully",
-            "assignedVehicles": assigned_vehicles
-        })
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"error": str(e)}), 500
+class Service(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    booking_id = db.Column(db.Integer, db.ForeignKey("booking.id"), nullable=False)
+    driver_id = db.Column(db.Integer, db.ForeignKey("driver.id"), nullable=True)
+    vehicle_id = db.Column(db.Integer, db.ForeignKey("vehicle.id"), nullable=True)
+    
+    serviceType = db.Column(db.String(50), nullable=False)  # Tour, Vehicle, Hotel
+    serviceName = db.Column(db.String(200), nullable=False)
+    
+    startDate = db.Column(db.Date, nullable=False)
+    endDate = db.Column(db.Date, nullable=False)
+    
+    # New fields for tour timing (for notifications)
+    startTime = db.Column(db.Time, nullable=True)  # Start time for tours
+    endTime = db.Column(db.Time, nullable=True)    # End time for tours
+    
+    costToCompany = db.Column(db.Float, nullable=True, default=0.0)
+    sellingPrice = db.Column(db.Float, nullable=True, default=0.0)
+    
+    hotelName = db.Column(db.String(200), nullable=True)
+    hotelCity = db.Column(db.String(100), nullable=True)  # New field for hotel city
+    roomType = db.Column(db.String(100), nullable=True)
+    numNights = db.Column(db.Integer, nullable=True)
+    costPerNight = db.Column(db.Float, nullable=True)
+    sellingPricePerNight = db.Column(db.Float, nullable=True)
+    
+    # Keep is_hourly and hours for vehicle rentals only
+    is_hourly = db.Column(db.Boolean, default=False) # For vehicle rentals by hour
+    hours = db.Column(db.Float, nullable=True) # Number of hours for vehicle rentals
+    with_driver = db.Column(db.Boolean, nullable=True) # For car rental with/without driver
 
-@drivers_bp.route("/drivers/<int:driver_id>", methods=["DELETE"])
-def delete_driver(driver_id):
-    try:
-        driver = Driver.query.get_or_404(driver_id)
-        
-        # Check if driver has active bookings with safe counting
-        active_bookings = safe_count(Service.query.filter_by(driver_id=driver_id).join(Booking).filter(
-            Booking.status.in_(["pending", "confirmed"])
-        ).count())
-        
-        if active_bookings > 0:
-            return jsonify({"error": f"Cannot delete driver with {active_bookings} active bookings"}), 400
-        
-        # Unassign vehicles before deleting driver
-        for vehicle in driver.assigned_vehicles:
-            vehicle.assigned_driver_id = None
-        
-        db.session.delete(driver)
-        db.session.commit()
-        return jsonify({"message": "Driver deleted successfully"})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"error": str(e)}), 500
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-# New endpoint to get driver schedule/calendar data
-@drivers_bp.route("/drivers/<int:driver_id>/schedule", methods=["GET"])
-def get_driver_schedule(driver_id):
-    try:
-        from datetime import datetime, timedelta
-        
-        driver = Driver.query.get_or_404(driver_id)
-        
-        # Get date range from query parameters (default to current month)
-        start_date = request.args.get('start_date')
-        end_date = request.args.get('end_date')
-        
-        if not start_date:
-            # Default to current month
-            today = datetime.now().date()
-            start_date = today.replace(day=1)
-        else:
-            start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
-            
-        if not end_date:
-            # Default to end of current month
-            if start_date.month == 12:
-                end_date = start_date.replace(year=start_date.year + 1, month=1, day=1) - timedelta(days=1)
-            else:
-                end_date = start_date.replace(month=start_date.month + 1, day=1) - timedelta(days=1)
-        else:
-            end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
-        
-        # Get all services for this driver within the date range
-        services = Service.query.filter_by(driver_id=driver_id).join(Booking).filter(
-            Service.startDate >= start_date,
-            Service.endDate <= end_date,
-            Booking.status.in_(["pending", "confirmed", "completed"])
-        ).all()
-        
-        schedule_data = []
-        for service in services:
-            schedule_data.append({
-                "id": service.id,
-                "title": service.serviceName,
-                "start": service.startDate.isoformat(),
-                "end": service.endDate.isoformat(),
-                "startTime": service.startTime.strftime("%H:%M") if service.startTime else None,
-                "endTime": service.endTime.strftime("%H:%M") if service.endTime else None,
-                "serviceType": service.serviceType,
-                "bookingId": service.booking_id,
-                "bookingStatus": service.booking_ref.status,
-                "clientName": f"{service.booking_ref.client_ref.firstName} {service.booking_ref.client_ref.lastName}" if service.booking_ref.client_ref else "Unknown",
-                "vehicleInfo": f"{service.vehicle_ref.model} - {service.vehicle_ref.plateNumber}" if service.vehicle_ref else None,
-                "notes": service.notes
-            })
-        
-        return jsonify({
-            "driverId": driver_id,
-            "driverName": f"{driver.firstName} {driver.lastName}",
-            "startDate": start_date.isoformat(),
-            "endDate": end_date.isoformat(),
-            "schedule": schedule_data
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    @property
+    def isAccommodation(self):
+        return self.serviceType in ["Hotel", "Cabin"]
+    
+    @property
+    def isTour(self):
+        return self.serviceType == "Tour"
+    
+    @property
+    def isVehicleRental(self):
+        return self.serviceType == "Vehicle"
 
-# New endpoint to get all drivers with their current booking status
-@drivers_bp.route("/drivers/status", methods=["GET"])
-def get_drivers_status():
-    try:
-        from datetime import datetime, date
-        
-        drivers = Driver.query.all()
-        result = []
-        
-        today = date.today()
-        
-        for driver in drivers:
-            # Check if driver has any active bookings today
-            active_today = Service.query.filter_by(driver_id=driver.id).join(Booking).filter(
-                Service.startDate <= today,
-                Service.endDate >= today,
-                Booking.status.in_(["pending", "confirmed"])
-            ).first()
-            
-            # Get next upcoming booking
-            next_booking = Service.query.filter_by(driver_id=driver.id).join(Booking).filter(
-                Service.startDate > today,
-                Booking.status.in_(["pending", "confirmed"])
-            ).order_by(Service.startDate.asc()).first()
-            
-            status = "available"
-            if active_today:
-                status = "busy"
-            elif next_booking:
-                status = "scheduled"
-            
-            result.append({
-                "id": driver.id,
-                "firstName": driver.firstName,
-                "lastName": driver.lastName,
-                "fullName": f"{driver.firstName} {driver.lastName}",
-                "status": status,
-                "currentBooking": {
-                    "id": active_today.id,
-                    "serviceName": active_today.serviceName,
-                    "startDate": active_today.startDate.isoformat(),
-                    "endDate": active_today.endDate.isoformat(),
-                    "clientName": f"{active_today.booking_ref.client_ref.firstName} {active_today.booking_ref.client_ref.lastName}" if active_today.booking_ref.client_ref else "Unknown"
-                } if active_today else None,
-                "nextBooking": {
-                    "id": next_booking.id,
-                    "serviceName": next_booking.serviceName,
-                    "startDate": next_booking.startDate.isoformat(),
-                    "endDate": next_booking.endDate.isoformat(),
-                    "clientName": f"{next_booking.booking_ref.client_ref.firstName} {next_booking.booking_ref.client_ref.lastName}" if next_booking.booking_ref.client_ref else "Unknown"
-                } if next_booking else None
-            })
-        
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    @property
+    def totalCost(self):
+        if self.isAccommodation and self.numNights and self.costPerNight:
+            return self.numNights * self.costPerNight
+        if self.isVehicleRental and self.is_hourly and self.hours and self.costToCompany:
+            return self.hours * self.costToCompany
+        return self.costToCompany if self.costToCompany is not None else 0.0
+    
+    @property
+    def totalSellingPrice(self):
+        if self.isAccommodation and self.numNights and self.sellingPricePerNight:
+            return self.numNights * self.sellingPricePerNight
+        if self.isVehicleRental and self.is_hourly and self.hours and self.sellingPrice:
+            return self.hours * self.sellingPrice
+        return self.sellingPrice if self.sellingPrice is not None else 0.0
+    
+    @property
+    def profit(self):
+        return self.totalSellingPrice - self.totalCost
+    
+    @property
+    def startDateTime(self):
+        """Get full start datetime for tours (combining date and time)"""
+        if self.isTour and self.startTime:
+            return datetime.combine(self.startDate, self.startTime)
+        return datetime.combine(self.startDate, time(0, 0))  # Default to midnight
+    
+    @property
+    def endDateTime(self):
+        """Get full end datetime for tours (combining date and time)"""
+        if self.isTour and self.endTime:
+            return datetime.combine(self.endDate, self.endTime)
+        return datetime.combine(self.endDate, time(23, 59))  # Default to end of day
+
+class Invoice(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    booking_id = db.Column(db.Integer, db.ForeignKey("booking.id"), nullable=False)
+    invoiceType = db.Column(db.String(20), nullable=False) # client, company, monthly_company, my_company
+    totalAmount = db.Column(db.Float, nullable=False)
+    status = db.Column(db.String(20), default="pending")  # pending, paid, overdue
+    invoiceDate = db.Column(db.Date, nullable=False)
+    pdfPath = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationship
+    # booking = db.relationship("Booking", backref="invoices", lazy=True) # This line is removed as the relationship is defined in Booking model
+
+# New model for monthly company invoices
+class MonthlyCompanyInvoice(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey("company.id"), nullable=False)
+    invoice_month = db.Column(db.Integer, nullable=False)  # 1-12
+    invoice_year = db.Column(db.Integer, nullable=False)
+    
+    # Invoice details
+    totalAmount = db.Column(db.Float, nullable=False, default=0.0)
+    totalCost = db.Column(db.Float, nullable=False, default=0.0)  # For my_company invoices
+    totalProfit = db.Column(db.Float, nullable=False, default=0.0)  # For my_company invoices
+    
+    # Invoice type: 'partner_company' or 'my_company'
+    invoiceType = db.Column(db.String(20), nullable=False, default="partner_company")
+    
+    status = db.Column(db.String(20), default="pending")  # pending, paid, overdue
+    invoiceDate = db.Column(db.Date, nullable=False)
+    pdfPath = db.Column(db.String(255), nullable=True)
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    company = db.relationship("Company", backref="monthly_invoices", lazy=True)
+    invoice_items = db.relationship("MonthlyInvoiceItem", backref="monthly_invoice", lazy=True, cascade="all, delete-orphan")
+    
+    @property
+    def invoice_period(self):
+        """Get formatted invoice period"""
+        months = [
+             "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+        ]
+        return f"{months[self.invoice_month - 1]} {self.invoice_year}"
+
+# New model for monthly invoice items (services breakdown)
+class MonthlyInvoiceItem(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    monthly_invoice_id = db.Column(db.Integer, db.ForeignKey("monthly_company_invoice.id"), nullable=False)
+    service_id = db.Column(db.Integer, db.ForeignKey("service.id"), nullable=True)  # Reference to original service
+    
+    # Client information
+    client_name = db.Column(db.String(200), nullable=False)
+    arrival_date = db.Column(db.Date, nullable=True)
+    
+    # Service details
+    service_type = db.Column(db.String(50), nullable=False)  # Tour, Vehicle, Hotel
+    service_name = db.Column(db.String(200), nullable=False)
+    service_date = db.Column(db.Date, nullable=False)
+    
+    # Financial details
+    cost_price = db.Column(db.Float, nullable=False, default=0.0)
+    selling_price = db.Column(db.Float, nullable=False, default=0.0)
+    profit = db.Column(db.Float, nullable=False, default=0.0)
+    
+    # Additional details
+    nights_or_hours = db.Column(db.String(50), nullable=True)  # "3 nights" or "5 hours"
+    city = db.Column(db.String(100), nullable=True)
+    hotel_or_tour_name = db.Column(db.String(200), nullable=True)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    service = db.relationship("Service", backref="monthly_invoice_items", lazy=True)
+
+class Notification(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    driver_id = db.Column(db.Integer, db.ForeignKey("driver.id"), nullable=False)
+    booking_id = db.Column(db.Integer, db.ForeignKey("booking.id"), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    notification_type = db.Column(db.String(50), nullable=False)  # email, whatsapp, sms
+    sent_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_sent = db.Column(db.Boolean, default=False)
+    
+    # Relationships
+    driver = db.relationship("Driver", backref="notifications", lazy=True)
+    booking = db.relationship("Booking", backref="notifications", lazy=True)
+
+class Settings(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(100), unique=True, nullable=False)
+    value = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 
