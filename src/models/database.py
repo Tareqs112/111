@@ -3,18 +3,18 @@ from datetime import datetime, date, time
 
 class Client(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    first_name = db.Column(db.String(100), nullable=False)
-    last_name = db.Column(db.String(100), nullable=False)
-    email = db.Column(db.String(120), nullable=True)
-    phone = db.Column(db.String(20), nullable=True)
-    passport_number = db.Column(db.String(50), nullable=True)
-    license_number = db.Column(db.String(50), nullable=True)
+    firstName = db.Column(db.String(100), nullable=False)
+    lastName = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(120), nullable=True)  # Made nullable
+    phone = db.Column(db.String(20), nullable=True)  # Made nullable
+    passportNumber = db.Column(db.String(50), nullable=True)  # New field
+    licenseNumber = db.Column(db.String(50), nullable=True)  # New field
     address = db.Column(db.Text)
     company_id = db.Column(db.Integer, db.ForeignKey("company.id"), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    paid_amount = db.Column(db.Float, nullable=True, default=0.0)
-    payment_status = db.Column(db.String(20), default="pending")
-    payment_date = db.Column(db.Date, nullable=True)
+    paidAmount = db.Column(db.Float, nullable=True, default=0.0)
+    paymentStatus = db.Column(db.String(20), default="pending")  # pending, paid, overdue
+    paymentDate = db.Column(db.Date, nullable=True)
     
     # Relationships
     company = db.relationship("Company", backref="clients", lazy=True)
@@ -26,17 +26,17 @@ class Company(db.Model):
     email = db.Column(db.String(120), unique=True, nullable=True)
     phone = db.Column(db.String(20), nullable=True)
     address = db.Column(db.Text)
-    contact_person = db.Column(db.String(100), nullable=True)
-    logo_path = db.Column(db.String(255), nullable=True)
+    contactPerson = db.Column(db.String(100), nullable=True)
+    logoPath = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class Driver(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    first_name = db.Column(db.String(100), nullable=False)
-    last_name = db.Column(db.String(100), nullable=False)
+    firstName = db.Column(db.String(100), nullable=False)
+    lastName = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     phone = db.Column(db.String(20), nullable=False)
-    license_number = db.Column(db.String(50), unique=True, nullable=False)
+    licenseNumber = db.Column(db.String(50), unique=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relationship
@@ -46,8 +46,8 @@ class Driver(db.Model):
 class Vehicle(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     model = db.Column(db.String(100), nullable=False)
-    plate_number = db.Column(db.String(20), unique=True, nullable=False)
-    type = db.Column(db.String(50), nullable=False)
+    plateNumber = db.Column(db.String(20), unique=True, nullable=False)
+    type = db.Column(db.String(50), nullable=False)  # Sedan, SUV, Van, Bus, etc.
     capacity = db.Column(db.Integer, nullable=False)
     assigned_driver_id = db.Column(db.Integer, db.ForeignKey("driver.id"), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -60,10 +60,10 @@ class Booking(db.Model):
     client_id = db.Column(db.Integer, db.ForeignKey("client.id"), nullable=False)
     
     # Overall booking details
-    overall_start_date = db.Column(db.Date, nullable=False)
-    overall_end_date = db.Column(db.Date, nullable=False)
+    overall_startDate = db.Column(db.Date, nullable=False)
+    overall_endDate = db.Column(db.Date, nullable=False)
     notes = db.Column(db.Text)
-    status = db.Column(db.String(20), default="pending")
+    status = db.Column(db.String(20), default="pending")  # pending, confirmed, completed, cancelled
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relationships
@@ -74,23 +74,23 @@ class Booking(db.Model):
     def client(self):
         """Get client name for display"""
         if self.client_ref:
-            return f"{self.client_ref.first_name} {self.client_ref.last_name}"
+            return f"{self.client_ref.firstName} {self.client_ref.lastName}"
         return "Unknown Client"
     
     @property
-    def total_cost(self):
+    def totalCost(self):
         """Calculate total cost of all services in the booking"""
-        return sum(service.total_cost for service in self.services)
+        return sum(service.totalCost for service in self.services)
     
     @property
-    def total_selling_price(self):
+    def totalSellingPrice(self):
         """Calculate total selling price of all services in the booking"""
-        return sum(service.total_selling_price for service in self.services)
+        return sum(service.totalSellingPrice for service in self.services)
     
     @property
     def profit(self):
         """Calculate total profit of all services in the booking"""
-        return self.total_selling_price - self.total_cost
+        return self.totalSellingPrice - self.totalCost
 
 class Service(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -98,105 +98,111 @@ class Service(db.Model):
     driver_id = db.Column(db.Integer, db.ForeignKey("driver.id"), nullable=True)
     vehicle_id = db.Column(db.Integer, db.ForeignKey("vehicle.id"), nullable=True)
     
-    service_type = db.Column(db.String(50), nullable=False)
-    service_name = db.Column(db.String(200), nullable=False)
+    serviceType = db.Column(db.String(50), nullable=False)  # Tour, Vehicle, Hotel
+    serviceName = db.Column(db.String(200), nullable=False)
     
-    start_date = db.Column(db.Date, nullable=False)
-    end_date = db.Column(db.Date, nullable=False)
+    startDate = db.Column(db.Date, nullable=False)
+    endDate = db.Column(db.Date, nullable=False)
     
     # New fields for tour timing (for notifications)
-    start_time = db.Column(db.Time, nullable=True)
-    end_time = db.Column(db.Time, nullable=True)
+    startTime = db.Column(db.Time, nullable=True)  # Start time for tours
+    endTime = db.Column(db.Time, nullable=True)    # End time for tours
     
-    cost_to_company = db.Column(db.Float, nullable=True, default=0.0)
-    selling_price = db.Column(db.Float, nullable=True, default=0.0)
+    costToCompany = db.Column(db.Float, nullable=True, default=0.0)
+    sellingPrice = db.Column(db.Float, nullable=True, default=0.0)
     
-    hotel_name = db.Column(db.String(200), nullable=True)
-    hotel_city = db.Column(db.String(100), nullable=True)
-    room_type = db.Column(db.String(100), nullable=True)
-    num_nights = db.Column(db.Integer, nullable=True)
-    cost_per_night = db.Column(db.Float, nullable=True)
-    selling_price_per_night = db.Column(db.Float, nullable=True)
+    hotelName = db.Column(db.String(200), nullable=True)
+    hotelCity = db.Column(db.String(100), nullable=True)  # New field for hotel city
+    roomType = db.Column(db.String(100), nullable=True)
+    numNights = db.Column(db.Integer, nullable=True)
+    costPerNight = db.Column(db.Float, nullable=True)
+    sellingPricePerNight = db.Column(db.Float, nullable=True)
     
     # Keep is_hourly and hours for vehicle rentals only
-    is_hourly = db.Column(db.Boolean, default=False)
-    hours = db.Column(db.Float, nullable=True)
-    with_driver = db.Column(db.Boolean, nullable=True)
+    is_hourly = db.Column(db.Boolean, default=False) # For vehicle rentals by hour
+    hours = db.Column(db.Float, nullable=True) # Number of hours for vehicle rentals
+    with_driver = db.Column(db.Boolean, nullable=True) # For car rental with/without driver
 
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     @property
-    def is_accommodation(self):
-        return self.service_type in ["Hotel", "Cabin"]
+    def isAccommodation(self):
+        return self.serviceType in ["Hotel", "Cabin"]
     
     @property
-    def is_tour(self):
-        return self.service_type == "Tour"
+    def isTour(self):
+        return self.serviceType == "Tour"
     
     @property
-    def is_vehicle_rental(self):
-        return self.service_type == "Vehicle"
+    def isVehicleRental(self):
+        return self.serviceType == "Vehicle"
 
     @property
-    def total_cost(self):
-        if self.is_accommodation and self.num_nights and self.cost_per_night:
-            return self.num_nights * self.cost_per_night
-        if self.is_vehicle_rental and self.is_hourly and self.hours and self.cost_to_company:
-            return self.hours * self.cost_to_company
-        return self.cost_to_company if self.cost_to_company is not None else 0.0
+    def totalCost(self):
+        if self.isAccommodation and self.numNights and self.costPerNight:
+            return self.numNights * self.costPerNight
+        if self.isVehicleRental and self.is_hourly and self.hours and self.costToCompany:
+            return self.hours * self.costToCompany
+        return self.costToCompany if self.costToCompany is not None else 0.0
     
     @property
-    def total_selling_price(self):
-        if self.is_accommodation and self.num_nights and self.selling_price_per_night:
-            return self.num_nights * self.selling_price_per_night
-        if self.is_vehicle_rental and self.is_hourly and self.hours and self.selling_price:
-            return self.hours * self.selling_price
-        return self.selling_price if self.selling_price is not None else 0.0
+    def totalSellingPrice(self):
+        if self.isAccommodation and self.numNights and self.sellingPricePerNight:
+            return self.numNights * self.sellingPricePerNight
+        if self.isVehicleRental and self.is_hourly and self.hours and self.sellingPrice:
+            return self.hours * self.sellingPrice
+        return self.sellingPrice if self.sellingPrice is not None else 0.0
     
     @property
     def profit(self):
-        return self.total_selling_price - self.total_cost
+        return self.totalSellingPrice - self.totalCost
     
     @property
-    def start_date_time(self):
+    def startDateTime(self):
         """Get full start datetime for tours (combining date and time)"""
-        if self.is_tour and self.start_time:
-            return datetime.combine(self.start_date, self.start_time)
-        return datetime.combine(self.start_date, time(0, 0))
+        if self.isTour and self.startTime:
+            return datetime.combine(self.startDate, self.startTime)
+        return datetime.combine(self.startDate, time(0, 0))  # Default to midnight
     
     @property
-    def end_date_time(self):
+    def endDateTime(self):
         """Get full end datetime for tours (combining date and time)"""
-        if self.is_tour and self.end_time:
-            return datetime.combine(self.end_date, self.end_time)
-        return datetime.combine(self.end_date, time(23, 59))
+        if self.isTour and self.endTime:
+            return datetime.combine(self.endDate, self.endTime)
+        return datetime.combine(self.endDate, time(23, 59))  # Default to end of day
 
 class Invoice(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     booking_id = db.Column(db.Integer, db.ForeignKey("booking.id"), nullable=False)
-    invoice_type = db.Column(db.String(20), nullable=False)
-    total_amount = db.Column(db.Float, nullable=False)
-    status = db.Column(db.String(20), default="pending")
-    invoice_date = db.Column(db.Date, nullable=False)
-    pdf_path = db.Column(db.String(255), nullable=True)
+    invoiceType = db.Column(db.String(20), nullable=False) # client, company, monthly_company, my_company
+    totalAmount = db.Column(db.Float, nullable=False)
+    status = db.Column(db.String(20), default="pending")  # pending, paid, overdue
+    invoiceDate = db.Column(db.Date, nullable=False)
+    pdfPath = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationship
+    # booking = db.relationship("Booking", backref="invoices", lazy=True) # This line is removed as the relationship is defined in Booking model
 
+# New model for monthly company invoices
 class MonthlyCompanyInvoice(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     company_id = db.Column(db.Integer, db.ForeignKey("company.id"), nullable=False)
-    invoice_month = db.Column(db.Integer, nullable=False)
+    invoice_month = db.Column(db.Integer, nullable=False)  # 1-12
     invoice_year = db.Column(db.Integer, nullable=False)
     
-    total_amount = db.Column(db.Float, nullable=False, default=0.0)
-    total_cost = db.Column(db.Float, nullable=False, default=0.0)
-    total_profit = db.Column(db.Float, nullable=False, default=0.0)
+    # Invoice details
+    totalAmount = db.Column(db.Float, nullable=False, default=0.0)
+    totalCost = db.Column(db.Float, nullable=False, default=0.0)  # For my_company invoices
+    totalProfit = db.Column(db.Float, nullable=False, default=0.0)  # For my_company invoices
     
-    invoice_type = db.Column(db.String(20), nullable=False, default="partner_company")
+    # Invoice type: 'partner_company' or 'my_company'
+    invoiceType = db.Column(db.String(20), nullable=False, default="partner_company")
     
-    status = db.Column(db.String(20), default="pending")
-    invoice_date = db.Column(db.Date, nullable=False)
-    pdf_path = db.Column(db.String(255), nullable=True)
+    status = db.Column(db.String(20), default="pending")  # pending, paid, overdue
+    invoiceDate = db.Column(db.Date, nullable=False)
+    pdfPath = db.Column(db.String(255), nullable=True)
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
@@ -213,23 +219,28 @@ class MonthlyCompanyInvoice(db.Model):
         ]
         return f"{months[self.invoice_month - 1]} {self.invoice_year}"
 
+# New model for monthly invoice items (services breakdown)
 class MonthlyInvoiceItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     monthly_invoice_id = db.Column(db.Integer, db.ForeignKey("monthly_company_invoice.id"), nullable=False)
-    service_id = db.Column(db.Integer, db.ForeignKey("service.id"), nullable=True)
+    service_id = db.Column(db.Integer, db.ForeignKey("service.id"), nullable=True)  # Reference to original service
     
+    # Client information
     client_name = db.Column(db.String(200), nullable=False)
     arrival_date = db.Column(db.Date, nullable=True)
     
-    service_type = db.Column(db.String(50), nullable=False)
+    # Service details
+    service_type = db.Column(db.String(50), nullable=False)  # Tour, Vehicle, Hotel
     service_name = db.Column(db.String(200), nullable=False)
     service_date = db.Column(db.Date, nullable=False)
     
+    # Financial details
     cost_price = db.Column(db.Float, nullable=False, default=0.0)
     selling_price = db.Column(db.Float, nullable=False, default=0.0)
     profit = db.Column(db.Float, nullable=False, default=0.0)
     
-    nights_or_hours = db.Column(db.String(50), nullable=True)
+    # Additional details
+    nights_or_hours = db.Column(db.String(50), nullable=True)  # "3 nights" or "5 hours"
     city = db.Column(db.String(100), nullable=True)
     hotel_or_tour_name = db.Column(db.String(200), nullable=True)
     
@@ -243,7 +254,7 @@ class Notification(db.Model):
     driver_id = db.Column(db.Integer, db.ForeignKey("driver.id"), nullable=False)
     booking_id = db.Column(db.Integer, db.ForeignKey("booking.id"), nullable=False)
     message = db.Column(db.Text, nullable=False)
-    notification_type = db.Column(db.String(50), nullable=False)
+    notification_type = db.Column(db.String(50), nullable=False)  # email, whatsapp, sms
     sent_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_sent = db.Column(db.Boolean, default=False)
     
@@ -257,5 +268,6 @@ class Settings(db.Model):
     value = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 
 

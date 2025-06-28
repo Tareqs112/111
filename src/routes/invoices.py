@@ -490,13 +490,13 @@ def generate_monthly_company_invoice_pdf(monthly_invoice):
     
     # Serial Number - Display first
     pdf.set_font("NotoArabic", "B", 14) if add_unicode_fonts(pdf) else pdf.set_font("Helvetica", "B", 14)
-    invoice_serial = f"COMP-{monthly_invoice.invoice_date.strftime('%Y%m')}-{monthly_invoice.id}"
+    invoice_serial = f"COMP-{monthly_invoice.invoiceDate.strftime('%Y%m')}-{monthly_invoice.id}"
     pdf.cell(0, 10, f"Invoice Serial: {invoice_serial}", 0, 1, "L")
     pdf.ln(5)
     
     # Invoice details
     pdf.set_font("NotoArabic", "B", 12) if add_unicode_fonts(pdf) else pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 10, f"Invoice Date: {monthly_invoice.invoice_date.strftime('%Y-%m-%d')}", 0, 1, "L")
+    pdf.cell(0, 10, f"Invoice Date: {monthly_invoice.invoiceDate.strftime('%Y-%m-%d')}", 0, 1, "L")
     pdf.cell(0, 10, f"Period: {safe_get_text(monthly_invoice, 'invoice_period', 'N/A')}", 0, 1, "L")
     pdf.cell(0, 10, f"Invoice ID: {monthly_invoice.id}", 0, 1, "L")
     pdf.ln(5)
@@ -612,13 +612,13 @@ def generate_my_company_invoice_pdf(monthly_invoice):
     
     # Serial Number - Display first
     pdf.set_font("NotoArabic", "B", 14) if add_unicode_fonts(pdf) else pdf.set_font("Helvetica", "B", 14)
-    invoice_serial = f"INT-{monthly_invoice.invoice_date.strftime('%Y%m')}-{monthly_invoice.id}"
+    invoice_serial = f"INT-{monthly_invoice.invoiceDate.strftime('%Y%m')}-{monthly_invoice.id}"
     pdf.cell(0, 10, f"Invoice Serial: {invoice_serial}", 0, 1, "L")
     pdf.ln(5)
     
     # Invoice details
     pdf.set_font("NotoArabic", "B", 12) if add_unicode_fonts(pdf) else pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 10, f"Invoice Date: {monthly_invoice.invoice_date.strftime('%Y-%m-%d')}", 0, 1, "L")
+    pdf.cell(0, 10, f"Invoice Date: {monthly_invoice.invoiceDate.strftime('%Y-%m-%d')}", 0, 1, "L")
     pdf.cell(0, 10, f"Period: {safe_get_text(monthly_invoice, 'invoice_period', 'N/A')}", 0, 1, "L")
     pdf.cell(0, 10, f"Invoice ID: {monthly_invoice.id}", 0, 1, "L")
     pdf.ln(5)
@@ -757,7 +757,7 @@ def get_invoices():
                 "service": service_name,
                 "type": safe_get_text(invoice, 'invoiceType', 'unknown'),
                 "status": safe_get_text(invoice, 'status', 'unknown'),
-                "date": invoice.invoice_date.strftime("%Y-%m-%d") if invoice.invoice_date else "N/A",
+                "date": invoice.invoiceDate.strftime("%Y-%m-%d") if invoice.invoiceDate else "N/A",
                 "amount": float(getattr(invoice, 'totalAmount', 0) or 0),
                 "pdfPath": safe_get_text(invoice, 'pdfPath', '')
             })
@@ -778,7 +778,7 @@ def get_invoices():
                 "service": f"Monthly Invoice - {invoice_period}",
                 "type": "company",
                 "status": status,
-                "date": monthly_invoice.invoice_date.strftime("%Y-%m-%d") if monthly_invoice.invoice_date else "N/A",
+                "date": monthly_invoice.invoiceDate.strftime("%Y-%m-%d") if monthly_invoice.invoiceDate else "N/A",
                 "amount": float(getattr(monthly_invoice, 'totalAmount', 0) or 0),
                 "pdfPath": safe_get_text(monthly_invoice, 'pdfPath', '')
             })
@@ -912,7 +912,7 @@ def generate_monthly_company_invoice():
             company_id=company_id,
             invoice_month=month,
             invoice_year=year,
-            invoice_date=date.today(),
+            invoiceDate=date.today(),
             totalAmount=total_amount,
             totalCost=total_cost,
             totalProfit=total_profit,
@@ -1093,7 +1093,7 @@ def generate_client_invoice(client_id):
                 invoiceType="client",
                 totalAmount=client_data["totalSellingPrice"],
                 status="completed",  # Set status to completed instead of generated
-                invoice_date=date.today(),
+                invoiceDate=date.today(),
                 pdfPath=f"/api/invoices/download/{pdf_filename}"
             )
             db.session.add(new_invoice)
